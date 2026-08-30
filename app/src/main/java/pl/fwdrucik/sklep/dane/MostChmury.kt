@@ -33,11 +33,11 @@ object MostChmury {
     @Volatile
     private var zalozona = false
 
+    @Synchronized
     private fun aplikacja(context: Context, cfg: TrojkaFirebase): FirebaseApp? {
         if (!cfg.gotowa) return null
         FirebaseApp.getApps(context).firstOrNull { it.name == FirebaseApp.DEFAULT_APP_NAME }
             ?.let { return it }
-        if (zalozona) return null
 
         val opcje = FirebaseOptions.Builder()
             .setProjectId(cfg.projectId)
@@ -46,7 +46,7 @@ object MostChmury {
             .build()
 
         return runCatching {
-            FirebaseApp.initializeApp(context, opcje).also { zalozona = true }
+            FirebaseApp.initializeApp(context.applicationContext, opcje).also { zalozona = true }
         }.getOrNull()
     }
 

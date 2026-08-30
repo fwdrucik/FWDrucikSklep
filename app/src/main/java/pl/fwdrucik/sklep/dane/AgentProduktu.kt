@@ -251,12 +251,19 @@ class AgentProduktu(
             pierwotny
         }
 
-        val bufor = ByteArrayOutputStream()
-        mapa.compress(Bitmap.CompressFormat.JPEG, 88, bufor)
-        DaneWlasne(
-            mimeType = "image/jpeg",
-            data = Base64.encodeToString(bufor.toByteArray(), Base64.NO_WRAP),
-        )
+        try {
+            val bufor = ByteArrayOutputStream()
+            mapa.compress(Bitmap.CompressFormat.JPEG, 88, bufor)
+            DaneWlasne(
+                mimeType = "image/jpeg",
+                data = Base64.encodeToString(bufor.toByteArray(), Base64.NO_WRAP),
+            )
+        } finally {
+            if (mapa !== pierwotny) {
+                mapa.recycle()
+            }
+            pierwotny.recycle()
+        }
     }
 
     private companion object {

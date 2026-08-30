@@ -125,14 +125,17 @@ class Repozytorium(
             val czesc = MultipartBody.Part.createFormData(
                 "plik", plik.name, plik.asRequestBody(typ.toMediaType())
             )
-            val odp = api.wgrajObraz(
-                produktId = pole(produktId.toString()),
-                alt = pole(alt),
-                pozycja = pole(pozycja.toString()),
-                plik = czesc,
-            )
-            plik.delete()
-            odp.obraz ?: throw IOException("Serwer nie odesłał danych zdjęcia.")
+            try {
+                val odp = api.wgrajObraz(
+                    produktId = pole(produktId.toString()),
+                    alt = pole(alt),
+                    pozycja = pole(pozycja.toString()),
+                    plik = czesc,
+                )
+                odp.obraz ?: throw IOException("Serwer nie odesłał danych zdjęcia.")
+            } finally {
+                plik.delete()
+            }
         }
 
     /**
@@ -161,42 +164,50 @@ class Repozytorium(
             tymczasowy
         }
 
-        val czesc = MultipartBody.Part.createFormData(
-            "plik", plikWejsciowy.name, plikWejsciowy.asRequestBody("image/jpeg".toMediaType())
-        )
-        val zlecenie = warsztat.zlec(
-            adres = "$adres/zlec",
-            zadanie = pole(zadanie),
-            opis = pole(opis),
-            plik = czesc,
-        )
-        plikWejsciowy.delete()
+        val stanZadania = try {
+            val czesc = MultipartBody.Part.createFormData(
+                "plik", plikWejsciowy.name, plikWejsciowy.asRequestBody("image/jpeg".toMediaType())
+            )
+            val zlecenie = warsztat.zlec(
+                adres = "$adres/zlec",
+                zadanie = pole(zadanie),
+                opis = pole(opis),
+                plik = czesc,
+            )
 
-        if (!zlecenie.ok || zlecenie.id.isBlank()) {
-            throw IOException(zlecenie.blad.ifBlank { "Serwer warsztatowy odrzucił zlecenie." })
-        }
-
-        // Limit trzydziestu minut jest hojny celowo: tyle bierze najdłuższa
-        // animacja. Przekroczenie znaczy, że coś stanęło, a nie że trwa.
-        val koniec = System.currentTimeMillis() + 30 * 60 * 1000
-        var stan: StanZadania
-        while (true) {
-            delay(4000)
-            stan = warsztat.zadanie("$adres/zadanie/${zlecenie.id}")
-            postep(stan.stan)
-            if (stan.gotowe) break
-            stan.blad?.takeIf { it.isNotBlank() }?.let { throw IOException(it) }
-            if (System.currentTimeMillis() > koniec) {
-                throw IOException("Komputer nie skończył w pół godziny — sprawdź serwer.")
+            if (!zlecenie.ok || zlecenie.id.isBlank()) {
+                throw IOException(zlecenie.blad.ifBlank { "Serwer warsztatowy odrzucił zlecenie." })
             }
+
+            // Limit trzydziestu minut jest hojny celowo: tyle bierze najdłuższa
+            // animacja. Przekroczenie znaczy, że coś stanęło, a nie że trwa.
+            val koniec = System.currentTimeMillis() + 30 * 60 * 1000
+            var stan: StanZadania
+            while (true) {
+                delay(4000)
+                stan = warsztat.zadanie("$adres/zadanie/${zlecenie.id}")
+                postep(stan.stan)
+                if (stan.gotowe) break
+                stan.blad?.takeIf { it.isNotBlank() }?.let { throw IOException(it) }
+                if (System.currentTimeMillis() > koniec) {
+                    throw IOException("Komputer nie skończył w pół godziny — sprawdź serwer.")
+                }
+            }
+            stan
+        } finally {
+            plikWejsciowy.delete()
         }
 
-        val wynikUrl = stan.wynikUrl ?: throw IOException("Serwer nie oddał pliku wynikowego.")
+        val wynikUrl = stanZadania.wynikUrl ?: throw IOException("Serwer nie oddał pliku wynikowego.")
         val cialo = warsztat.pobierz("$adres$wynikUrl")
         withContext(Dispatchers.IO) {
             val rozszerzenie = if (zadanie == "animacja") ".mp4" else ".png"
             val cel = File.createTempFile("zwarsztatu", rozszerzenie, kontekst.cacheDir)
-            cel.outputStream().use { wy -> cialo.byteStream().use { we -> we.copyTo(wy) } }
+            cel.outputStream().use { wy ->
+                cialo.use { resBody ->
+                    resBody.byteStream().use { we -> we.copyTo(wy) }
+                }
+            }
             cel
         }
     }

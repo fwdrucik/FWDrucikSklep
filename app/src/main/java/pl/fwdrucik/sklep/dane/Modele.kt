@@ -1,5 +1,7 @@
 package pl.fwdrucik.sklep.dane
 
+import java.math.BigDecimal
+import java.util.Locale
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -132,12 +134,14 @@ object Statusy {
 
 /** Grosze na tekst, jaki widzi człowiek: 12990 -> "129,90 zł". */
 fun groszeNaZlote(grosze: Int): String =
-    String.format("%d,%02d zł", grosze / 100, grosze % 100)
+    String.format(Locale("pl", "PL"), "%d,%02d zł", grosze / 100, grosze % 100)
 
 /** Odwrotnie — pole tekstowe na grosze, tolerancyjnie jak fw_grosze() w PHP. */
 fun zloteNaGrosze(tekst: String): Int? {
     val czyste = tekst.trim().replace(" ", "").replace(" ", "").replace(',', '.')
     if (czyste.isEmpty()) return null
     if (!Regex("""^\d+(\.\d{1,2})?$""").matches(czyste)) return null
-    return Math.round(czyste.toDouble() * 100).toInt()
+    return runCatching {
+        BigDecimal(czyste).movePointRight(2).intValueExact()
+    }.getOrNull()
 }
