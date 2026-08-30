@@ -1,0 +1,34 @@
+# --- Dane wrazliwe: nigdy do repozytorium ---------------------------------------------
+# local.properties trzyma sciezke do SDK, a moze trzymac tez dane klucza podpisujacego
+# (klucz.plik, klucz.haslo - patrz app/build.gradle.kts).
+local.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+*.crt
+secrets.properties
+# Wtyczka google-services nie jest uzywana - polaczenie z Firebase wpisuje sie
+# w ustawieniach aplikacji. Gdyby ten plik kiedys tu trafil, ma zostac na dysku.
+google-services.json
+
+# --- Wyniki budowania ------------------------------------------------------------------
+build/
+app/build/
+.gradle/
+.kotlin/
+*.apk
+*.aab
+*.ap_
+*.dex
+captures/
+.externalNativeBuild/
+.cxx/
+
+# --- Narzedzia i system ----------------------------------------------------------------
+.idea/
+*.iml
+.DS_Store
+Thumbs.db

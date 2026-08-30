@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+  <!-- Skrzynka narzedziowa: sklep warsztatu, nie sklep spozywczy. -->
+  <path android:fillColor="#2EC2FF"
+      android:pathData="M30,44h48v30h-48z"/>
+  <path android:fillColor="#FF8A3D"
+      android:pathData="M44,36h20v8h-8v4h-4v-4h-8z"/>
+  <path android:fillColor="#0B0D10"
+      android:pathData="M30,56h48v6h-48z"/>
+</vector>

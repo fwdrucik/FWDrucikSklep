@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Zdjecia z aparatu ladują w pamieci podrecznej aplikacji. Aparat to
+         obcy proces, wiec nie moze dostac zwyklej sciezki do pliku — dostaje
+         adres content:// przez FileProvider. Bez tego Android rzuca
+         FileUriExposedException i aparat sie nie otwiera. -->
+    <cache-path name="zdjecia" path="zdjecia/" />
+</paths>

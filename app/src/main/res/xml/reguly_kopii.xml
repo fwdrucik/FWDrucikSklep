@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <!-- Ciasteczko sesji administratora nie ma prawa wyjechac w kopii zapasowej
+         ani przy przenoszeniu na nowy telefon. Logowanie robi sie raz recznie. -->
+    <cloud-backup>
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+    </device-transfer>
+</data-extraction-rules>
