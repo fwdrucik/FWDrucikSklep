@@ -11,6 +11,31 @@ plugins {
 val localProps = Properties()
 rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { localProps.load(it) }
 
+// Numer wersji brany z historii gita, a nie wpisywany recznie.
+//
+// PO CO: recznie wpisywany numer rozjezdza sie z nazwami paczek w archiwum - po miesiacu
+// nie da sie powiedziec, ktora paczka na telefonie odpowiada ktoremu stanowi kodu. Liczba
+// commitow rosnie zawsze i nigdy nie maleje, czyli spelnia to, czego Android wymaga
+// od versionCode. Panel warsztatowy liczy to tak samo.
+//
+// PO CO BAZA 10: wszystkie wczesniejsze paczki sklepu mialy versionCode 1. Baza odsuwa
+// nowa numeracje od tamtych, zeby dwie rozne paczki nie chodzily pod tym samym numerem.
+fun zGita(vararg argumenty: String, gdyBrak: String): String = try {
+    val proces = ProcessBuilder(listOf("git") + argumenty)
+        .directory(rootProject.projectDir)
+        .redirectErrorStream(false)
+        .start()
+    val wynik = proces.inputStream.bufferedReader().readText().trim()
+    proces.waitFor()
+    if (proces.exitValue() == 0 && wynik.isNotBlank()) wynik else gdyBrak
+} catch (e: Exception) {
+    // Rozpakowana kopia repozytorium bez gita ma sie dalej budowac.
+    gdyBrak
+}
+
+val liczbaCommitow = zGita("rev-list", "--count", "HEAD", gdyBrak = "0").toInt()
+val skrotCommita = zGita("rev-parse", "--short", "HEAD", gdyBrak = "bezgita")
+
 android {
     namespace = "pl.fwdrucik.sklep"
     compileSdk = 34
@@ -21,8 +46,8 @@ android {
         // na pulpicie, a nie aktualizacja aplikacji warsztatowej.
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 10 + liczbaCommitow
+        versionName = "1.$liczbaCommitow+$skrotCommita"
 
         // Adres serwera trzymamy w BuildConfig, żeby test na innym adresie nie
         // wymagał grzebania w kodzie. Zmiana w jednym miejscu.
