@@ -62,9 +62,9 @@ class Ustawienia(context: Context) {
      */
     val chmura: Flow<TrojkaFirebase> = magazyn.data.map {
         TrojkaFirebase(
-            projectId = it[FB_PROJECT].orEmpty(),
-            appId = it[FB_APP].orEmpty(),
-            apiKey = it[FB_KLUCZ].orEmpty(),
+            projectId = it[FB_PROJECT]?.takeIf(String::isNotBlank) ?: DOMYSLNY_PROJEKT,
+            appId = it[FB_APP]?.takeIf(String::isNotBlank) ?: DOMYSLNA_APLIKACJA,
+            apiKey = it[FB_KLUCZ]?.takeIf(String::isNotBlank) ?: DOMYSLNY_KLUCZ,
         )
     }
 
@@ -85,9 +85,22 @@ class Ustawienia(context: Context) {
 
 /** Komplet danych do polaczenia z Firebase. Pusty projectId znaczy "chmura wylaczona". */
 data class TrojkaFirebase(
-    val projectId: String = "",
-    val appId: String = "",
-    val apiKey: String = "",
+    val projectId: String = DOMYSLNY_PROJEKT,
+    val appId: String = DOMYSLNA_APLIKACJA,
+    val apiKey: String = DOMYSLNY_KLUCZ,
 ) {
     val gotowa: Boolean get() = projectId.isNotBlank() && appId.isNotBlank() && apiKey.isNotBlank()
 }
+
+/**
+ * Dostep do projektu `fwdrucik-panel` wpisany z gory - tego samego, ktorego uzywa panel
+ * warsztatowy. Sklep ma tam WLASNA rejestracje aplikacji (inna nazwa pakietu, wiec inny
+ * identyfikator); klucz API jest wspolny dla calego projektu.
+ *
+ * DLACZEGO KLUCZ MOZE LEZEC W KODZIE: klucz API Firebase jest jawny z zalozenia - normalnie
+ * siedzi w google-services.json, ktory laduje sie w kazdym APK. Nie jest haslem i nie otwiera
+ * dostepu do danych; pilnuja ich reguly Firestore i lista dozwolonych podpisow aplikacji.
+ */
+const val DOMYSLNY_PROJEKT = "fwdrucik-panel"
+const val DOMYSLNA_APLIKACJA = "1:690524549652:android:d171a52ad00a1347f26d01"
+const val DOMYSLNY_KLUCZ = "AIzaSyAjuDWr2oI6Tc3g-f3HwT1MN11gNroGiQQ"
