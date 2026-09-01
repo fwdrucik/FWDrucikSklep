@@ -750,7 +750,8 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 "meta" -> "zdjecie-meta"
                 "flow" -> "zdjecie-flow"
                 "copilot" -> "zdjecie-copilot"
-                "forge", "gemini" -> "zdjecie-produktowe"
+                "gemini" -> "zdjecie-gemini"
+                "forge" -> "zdjecie-produktowe"
                 else -> "zdjecie-produktowe"
             }
             val poTle = repozytorium.zlecWarsztatowi(
@@ -775,7 +776,8 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 "meta" -> "zdjecie-meta"
                 "flow" -> "zdjecie-flow"
                 "copilot" -> "zdjecie-copilot"
-                "forge", "gemini" -> "zdjecie-produktowe"
+                "gemini" -> "zdjecie-gemini"
+                "forge" -> "zdjecie-produktowe"
                 else -> "zdjecie-produktowe"
             }
             val poSwietle = repozytorium.zlecWarsztatowi(
@@ -814,6 +816,7 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
             val zadanieRuchu = when (silnikRuchu) {
                 "flow" -> "animacja-flow"
                 "meta" -> "animacja-meta"
+                "gemini" -> "animacja-gemini"
                 "comfy" -> "animacja"
                 else -> "animacja"
             }
@@ -922,7 +925,7 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                                     _stan.value.poprawki,
                                 )
                             } catch (e: Exception) {
-                                if (adres.isBlank() || notatka.isBlank()) throw e
+                                if (silnikWybrany == "gemini" || adres.isBlank() || notatka.isBlank()) throw e
                                 dopiszCzynnosc(
                                     co = "Gemini odmówił — przechodzę na Muse",
                                     silnik = _stan.value.modelOpisu,
@@ -935,6 +938,9 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                                 agent.opiszPrzezMuse(adres, notatka, _stan.value.poprawki, zdjecie)
                             }
                         } else {
+                            if (silnikWybrany == "gemini") {
+                                throw java.io.IOException("Brak klucza Gemini — wpisz go w zakładce Pomoc.")
+                            }
                             agent.opiszPrzezMuse(adres, notatka, _stan.value.poprawki, zdjecie)
                         }
                     }
@@ -1001,10 +1007,19 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
             return
         }
 
-        // Gdy klucza nie ma, ale komputer stoi w warsztacie — poprawia Forge.
-        // To ta sama robota (czyste tlo, wyrownane swiatlo) na wlasnej karcie,
-        // za darmo i bez limitow. Muse tu nie pomoze: CLI nie widzi obrazu.
-        if (klucz.isBlank()) {
+        if (silnik == "gemini") {
+            if (adres.isNotBlank()) {
+                zlecWarsztatowi("zdjecie-gemini", zdjecie, wybor.dodatkowe, wybor.proporcje, gotowe)
+                return
+            }
+            if (klucz.isBlank()) {
+                _stan.update { it.copy(blad = "Wpisz klucz Gemini w zakładce Pomoc lub uruchom serwer warsztatu.") }
+                return
+            }
+        }
+
+        // Gdy klucza nie ma, ale komputer stoi w warsztacie i silnik to auto/forge — poprawia Forge.
+        if (klucz.isBlank() && silnik != "gemini") {
             if (adres.isBlank()) {
                 _stan.update {
                     it.copy(blad = "Wpisz klucz Gemini albo adres komputera w zakładce Pomoc.")
@@ -1033,7 +1048,7 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 dopiszCzynnosc("Poprawa zdjęcia", _stan.value.modelObrazu, "gotowe", plik.absolutePath)
                 _stan.update { it.copy(komunikat = "Zdjęcie poprawione — zapisano w galerii") }
             } catch (e: Exception) {
-                if (adres.isBlank()) {
+                if (wybor.silnik == "gemini" || adres.isBlank()) {
                     _stan.update { it.copy(blad = opisBledu(e)) }
                 } else {
                     _stan.update {

@@ -652,10 +652,12 @@ fun EkranKreatora(
                         // tlumaczymy wybor na nazwe zadania, ktora rozumie serwer.
                         val zadanieSerwera = when (silnik) {
                             "flow" -> "animacja-flow"
-                            "comfy" -> "animacja"
+                            "gemini" -> "animacja-gemini"
                             "meta" -> "animacja-meta"
+                            "comfy" -> "animacja"
                             else -> when (silnikAnimacji) {
                                 "flow" -> "animacja-flow"
+                                "gemini" -> "animacja-gemini"
                                 "meta" -> "animacja-meta"
                                 else -> "animacja"
                             }
