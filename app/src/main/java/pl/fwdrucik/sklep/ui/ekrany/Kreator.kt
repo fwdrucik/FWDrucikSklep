@@ -52,6 +52,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import android.widget.Toast
+import android.widget.VideoView
+import android.widget.MediaController
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CardDefaults
@@ -741,12 +745,53 @@ fun EkranKreatora(
             onDismissRequest = { },
             title = { Text("Gotowy materiał ruchomy — co z nim zrobić?") },
             text = {
-                Text(
-                    "Materiał w ogłoszeniu staje przed zdjęciami i to on rusza się " +
-                        "na stronie produktu. Zostawiony w kreatorze posłuży do " +
-                        "dalszej roboty, ale nie trafi jeszcze do sklepu.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                Column {
+                    val sciezka = film.toString().lowercase()
+                    val jestWideo = sciezka.endsWith(".mp4") || sciezka.contains("video/mp4")
+                    if (jestWideo) {
+                        var proporcjaFilmu by androidx.compose.runtime.remember(film) {
+                            androidx.compose.runtime.mutableStateOf(16f / 9f)
+                        }
+                        AndroidView(
+                            factory = { ctx ->
+                                VideoView(ctx).apply {
+                                    setMediaController(MediaController(ctx).also { it.setAnchorView(this) })
+                                    setVideoURI(film)
+                                    setOnPreparedListener { odtwarzacz ->
+                                        odtwarzacz.isLooping = true
+                                        if (odtwarzacz.videoWidth > 0 && odtwarzacz.videoHeight > 0) {
+                                            proporcjaFilmu =
+                                                odtwarzacz.videoWidth.toFloat() / odtwarzacz.videoHeight
+                                        }
+                                        start()
+                                    }
+                                }
+                            },
+                            update = { it.setVideoURI(film) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 240.dp)
+                                .aspectRatio(proporcjaFilmu),
+                        )
+                    } else {
+                        AsyncImage(
+                            model = film,
+                            contentDescription = "Gotowa animacja GIF",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 240.dp),
+                        )
+                    }
+                    Text(
+                        "Materiał w ogłoszeniu staje przed zdjęciami i to on rusza się " +
+                            "na stronie produktu. Zostawiony w kreatorze posłuży do " +
+                            "dalszej roboty, ale nie trafi jeszcze do sklepu.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             },
             confirmButton = {
                 TextButton(onClick = {

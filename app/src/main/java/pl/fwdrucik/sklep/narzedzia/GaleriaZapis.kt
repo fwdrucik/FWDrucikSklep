@@ -19,14 +19,22 @@ object GaleriaZapis {
      */
     fun zapiszDoGalerii(context: Context, plik: File, czyWideo: Boolean = false): Uri? {
         return try {
-            val rozszerzenie = plik.extension.ifBlank { if (czyWideo) "mp4" else "jpg" }
-            val mime = if (czyWideo) "video/mp4" else if (rozszerzenie.equals("png", true)) "image/png" else "image/jpeg"
-            val folderNazwa = if (czyWideo) Environment.DIRECTORY_MOVIES + "/FWDrucik" else Environment.DIRECTORY_PICTURES + "/FWDrucik"
+            val rozszerzenie = plik.extension.lowercase().ifBlank { if (czyWideo) "mp4" else "jpg" }
+            val jestGif = rozszerzenie == "gif"
+            val jestWideoPlik = czyWideo && !jestGif
+            val mime = when (rozszerzenie) {
+                "gif" -> "image/gif"
+                "png" -> "image/png"
+                "mp4" -> "video/mp4"
+                "webm" -> "video/webm"
+                else -> if (jestWideoPlik) "video/mp4" else "image/jpeg"
+            }
+            val folderNazwa = if (jestWideoPlik) Environment.DIRECTORY_MOVIES + "/FWDrucik" else Environment.DIRECTORY_PICTURES + "/FWDrucik"
             val nazwa = "FWDrucik_" + System.currentTimeMillis() + "." + rozszerzenie
 
             // 1. Zapis bezposredni do folderu publicznego (Pictures/FWDrucik lub Movies/FWDrucik)
             val katPubliczny = File(
-                Environment.getExternalStoragePublicDirectory(if (czyWideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES),
+                Environment.getExternalStoragePublicDirectory(if (jestWideoPlik) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES),
                 "FWDrucik"
             ).apply { mkdirs() }
             val plikPubliczny = File(katPubliczny, nazwa)
@@ -46,7 +54,7 @@ object GaleriaZapis {
                 }
             }
 
-            val kolekcja = if (czyWideo) {
+            val kolekcja = if (jestWideoPlik) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
                 } else {
