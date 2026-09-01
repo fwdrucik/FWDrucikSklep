@@ -120,59 +120,81 @@ fun EkranKreatora(
 ) {
     val p = istniejacy ?: Produkt()
 
-    var nazwa by rememberSaveable(p.id) { mutableStateOf(p.nazwa) }
-    var kategoria by rememberSaveable(p.id) { mutableStateOf(p.kategoria) }
-    var opisKrotki by rememberSaveable(p.id) { mutableStateOf(p.opisKrotki) }
-    var opis by rememberSaveable(p.id) { mutableStateOf(p.opis) }
-    var cena by rememberSaveable(p.id) { mutableStateOf(if (p.cenaGr > 0) groszeNaPole(p.cenaGr) else "") }
-    var cenaPromo by rememberSaveable(p.id) {
-        mutableStateOf(p.cenaPromoGr?.let(::groszeNaPole).orEmpty())
+    var nazwa by rememberSaveable(p.id) {
+        mutableStateOf(if (p.nazwa.isNotBlank()) p.nazwa else kopia?.nazwa.orEmpty())
     }
-    var stan by rememberSaveable(p.id) { mutableStateOf(p.stan?.toString().orEmpty()) }
-    var jednostka by rememberSaveable(p.id) { mutableStateOf(p.jednostka) }
-    var waga by rememberSaveable(p.id) { mutableStateOf(if (p.wagaG > 0) p.wagaG.toString() else "") }
-    var czas by rememberSaveable(p.id) { mutableStateOf(p.czasRealizacji) }
-    var status by rememberSaveable(p.id) { mutableStateOf(p.status) }
-    var pozycja by rememberSaveable(p.id) { mutableStateOf(p.pozycja.toString()) }
-    var opisZdjecia by rememberSaveable(p.id) { mutableStateOf("") }
+    var kategoria by rememberSaveable(p.id) {
+        mutableStateOf(if (p.kategoria.isNotBlank() && p.kategoria != "inne") p.kategoria else kopia?.kategoria?.ifBlank { "inne" } ?: "inne")
+    }
+    var opisKrotki by rememberSaveable(p.id) {
+        mutableStateOf(if (p.opisKrotki.isNotBlank()) p.opisKrotki else kopia?.opisKrotki.orEmpty())
+    }
+    var opis by rememberSaveable(p.id) {
+        mutableStateOf(if (p.opis.isNotBlank()) p.opis else kopia?.opis.orEmpty())
+    }
+    var cena by rememberSaveable(p.id) {
+        mutableStateOf(if (p.cenaGr > 0) groszeNaPole(p.cenaGr) else kopia?.cena.orEmpty())
+    }
+    var cenaPromo by rememberSaveable(p.id) {
+        mutableStateOf(p.cenaPromoGr?.let(::groszeNaPole) ?: kopia?.cenaPromo.orEmpty())
+    }
+    var stan by rememberSaveable(p.id) {
+        mutableStateOf(p.stan?.toString() ?: kopia?.stan.orEmpty())
+    }
+    var jednostka by rememberSaveable(p.id) {
+        mutableStateOf(if (p.jednostka.isNotBlank()) p.jednostka else kopia?.jednostka?.ifBlank { "szt." } ?: "szt.")
+    }
+    var waga by rememberSaveable(p.id) {
+        mutableStateOf(if (p.wagaG > 0) p.wagaG.toString() else kopia?.waga.orEmpty())
+    }
+    var czas by rememberSaveable(p.id) {
+        mutableStateOf(if (p.czasRealizacji.isNotBlank()) p.czasRealizacji else kopia?.czas.orEmpty())
+    }
+    var status by rememberSaveable(p.id) {
+        mutableStateOf(if (p.status.isNotBlank()) p.status else kopia?.status?.ifBlank { "szkic" } ?: "szkic")
+    }
+    var pozycja by rememberSaveable(p.id) {
+        mutableStateOf(if (p.pozycja > 0) p.pozycja.toString() else kopia?.pozycja?.ifBlank { "100" } ?: "100")
+    }
+    var notatka by rememberSaveable(p.id) {
+        mutableStateOf(kopia?.notatka.orEmpty())
+    }
+    var opisZdjecia by rememberSaveable(p.id) {
+        mutableStateOf(kopia?.opisZdjecia.orEmpty())
+    }
 
-    // Zdjęcie i notatka do agenta — stan wyłącznie tego ekranu.
-    // Zdjecie glowne NIE jest kluczowane po `p.id`.
-    //
-    // PO CO: po pierwszym zapisie nowego produktu `istniejacy` zmienia sie
-    // z `null` na produkt z nadanym numerem, wiec `p.id` skacze z 0 na N.
-    // Kazde `remember(p.id)` leci wtedy od nowa — i wybrane zdjecie znikalo
-    // z ekranu w srodku pracy, mimo ze nikt go nie usuwal. Zamiast klucza
-    // pilnujemy jawnie, dla ktorego produktu to zdjecie jest, i czyscimy je
-    // tylko przy przejsciu na INNY produkt.
-    var lokalneZdjecie by remember { mutableStateOf<Uri?>(null) }
+    var lokalneZdjecie by remember(p.id) {
+        mutableStateOf<Uri?>(
+            kopia?.zdjecie?.takeIf { it.isNotBlank() && java.io.File(it).exists() }?.let { Uri.fromFile(java.io.File(it)) }
+        )
+    }
     var zdjecieDlaProduktu by remember { mutableIntStateOf(p.id) }
 
     LaunchedEffect(p.id) {
         val bylNowy = zdjecieDlaProduktu == 0 && p.id > 0
         if (p.id != zdjecieDlaProduktu && !bylNowy) {
-            // Naprawde inny produkt — stare zdjecie nie ma tu czego szukac.
             lokalneZdjecie = null
         }
         zdjecieDlaProduktu = p.id
     }
-    val dodatkoweKadry = remember(p.id) { mutableStateListOf<Uri>() }
-    var animacja by remember(p.id) { mutableStateOf<Uri?>(null) }
-    // Oryginal trzymamy osobno: poprawka ma czyscic tlo, a nie zmieniac wyrobu,
-    // i tylko porownanie dwoch kadrow pozwala to zlapac.
+    val dodatkoweKadry = remember(p.id) {
+        mutableStateListOf<Uri>().apply {
+            kopia?.dodatkoweKadry?.forEach { path ->
+                if (path.isNotBlank() && java.io.File(path).exists()) {
+                    add(Uri.fromFile(java.io.File(path)))
+                }
+            }
+        }
+    }
+    var animacja by remember(p.id) {
+        mutableStateOf<Uri?>(
+            kopia?.animacja?.takeIf { it.isNotBlank() && java.io.File(it).exists() }?.let { Uri.fromFile(java.io.File(it)) }
+        )
+    }
     var zdjecieOryginalne by remember(p.id) { mutableStateOf<Uri?>(null) }
     var opisPrzedPoprawka by remember(p.id) { mutableStateOf<Triple<String, String, String>?>(null) }
     var pokazOgloszenie by remember(p.id) { mutableStateOf(false) }
-
-    // Ktora sekcja kreatora jest rozwinieta. 0 = wszystkie zwiniete.
-    //
-    // PO CO: kreator byl jedna scianą pol na kilka ekranow przewijania, a przy
-    // telefonie w reku nad stolem szuka sie w nim jednej rzeczy naraz. Harmonijka
-    // pokazuje jedna sekcje, a naglowki mowia skrotem, co juz jest wypelnione.
-    // Stan pol NIE siedzi w sekcjach — wszystkie zmienne, launchery aparatu,
-    // dialogi i BackHandler zostaja na poziomie ekranu, wiec zwiniecie sekcji
-    // niczego nie kasuje.
-    var otwarta by rememberSaveable { mutableIntStateOf(1) }
+    var otwarta by rememberSaveable { mutableIntStateOf(kopia?.sekcjaOtwarta?.takeIf { it in 1..4 } ?: 1) }
 
     // Swiezo policzony kadr i film — czekaja na decyzje czlowieka.
     //
@@ -229,7 +251,6 @@ fun EkranKreatora(
             naWyjscie()
         }
     }
-    var notatka by rememberSaveable(p.id) { mutableStateOf("") }
     var doUzupelnienia by remember(p.id) { mutableStateOf<List<String>>(emptyList()) }
 
     // Pierwszy krok drogi „Zdjecie": co ma sie z nim stac. Silnik wybiera sie
@@ -785,8 +806,18 @@ fun EkranKreatora(
         // czego ta cena dotyczy.
         lokalneZdjecie?.let { uri ->
             Box(Modifier.padding(top = 12.dp)) {
+                val modelObrazu = remember(uri) {
+                    val s = uri.toString()
+                    val p = uri.path.orEmpty()
+                    if (uri.scheme == null || uri.scheme == "file") {
+                        val sciezka = if (p.isNotBlank()) p else s.removePrefix("file://")
+                        java.io.File(sciezka)
+                    } else {
+                        uri
+                    }
+                }
                 AsyncImage(
-                    model = uri,
+                    model = modelObrazu,
                     contentDescription = "Zdjęcie główne produktu",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),

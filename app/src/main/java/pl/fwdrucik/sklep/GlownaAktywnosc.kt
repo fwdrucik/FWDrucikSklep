@@ -106,6 +106,23 @@ private fun Aplikacja(startowyEkran: String?) {
     var ostatnieWcisniecieWstecz by rememberSaveable { mutableLongStateOf(0L) }
     val snackbar = remember { SnackbarHostState() }
 
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ -> }
+
+    LaunchedEffect(Unit) {
+        val uprawnienia = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            uprawnienia.add(Manifest.permission.POST_NOTIFICATIONS)
+            uprawnienia.add(Manifest.permission.READ_MEDIA_IMAGES)
+            uprawnienia.add(Manifest.permission.READ_MEDIA_VIDEO)
+        } else {
+            uprawnienia.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            uprawnienia.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+        permissionLauncher.launch(uprawnienia.toTypedArray())
+    }
+
     // Automatyczne przywracanie sesji kreatora nawet po ubiciu zasilania / restarcie
     LaunchedEffect(stan.aktywnyKreatorId) {
         android.util.Log.d("FW_KREATOR", "LaunchedEffect stan.aktywnyKreatorId=${stan.aktywnyKreatorId}, edytowany=$edytowany")

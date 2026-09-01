@@ -1,4 +1,4 @@
-﻿package pl.fwdrucik.sklep.narzedzia
+package pl.fwdrucik.sklep.narzedzia
 
 import android.content.ContentValues
 import android.content.Context
@@ -21,14 +21,27 @@ object GaleriaZapis {
         return try {
             val rozszerzenie = plik.extension.ifBlank { if (czyWideo) "mp4" else "jpg" }
             val mime = if (czyWideo) "video/mp4" else if (rozszerzenie.equals("png", true)) "image/png" else "image/jpeg"
-            val folder = if (czyWideo) Environment.DIRECTORY_MOVIES + "/FWDrucik" else Environment.DIRECTORY_PICTURES + "/FWDrucik"
+            val folderNazwa = if (czyWideo) Environment.DIRECTORY_MOVIES + "/FWDrucik" else Environment.DIRECTORY_PICTURES + "/FWDrucik"
             val nazwa = "FWDrucik_" + System.currentTimeMillis() + "." + rozszerzenie
 
+            // 1. Zapis bezposredni do folderu publicznego (Pictures/FWDrucik lub Movies/FWDrucik)
+            val katPubliczny = File(
+                Environment.getExternalStoragePublicDirectory(if (czyWideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES),
+                "FWDrucik"
+            ).apply { mkdirs() }
+            val plikPubliczny = File(katPubliczny, nazwa)
+            runCatching {
+                FileInputStream(plik).use { we ->
+                    FileOutputStream(plikPubliczny).use { wy -> we.copyTo(wy) }
+                }
+            }
+
+            // 2. Wpis do MediaStore z ContentResolver
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, nazwa)
                 put(MediaStore.MediaColumns.MIME_TYPE, mime)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, folder)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, folderNazwa)
                     put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
             }
@@ -47,27 +60,30 @@ object GaleriaZapis {
                 }
             }
 
-            val uri = context.contentResolver.insert(kolekcja, values) ?: return null
-
-            context.contentResolver.openOutputStream(uri)?.use { out ->
-                FileInputStream(plik).use { wejscie ->
-                    wejscie.copyTo(out)
+            val uri = context.contentResolver.insert(kolekcja, values)
+            if (uri != null) {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    FileInputStream(plik).use { wejscie ->
+                        wejscie.copyTo(out)
+                    }
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    values.clear()
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    context.contentResolver.update(uri, values, null, null)
                 }
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                values.clear()
-                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                context.contentResolver.update(uri, values, null, null)
-            }
-
+            // 3. Wymuszenie przeskanowania przez MediaScanner
             MediaScannerConnection.scanFile(
                 context,
-                arrayOf(plik.absolutePath),
+                arrayOf(plikPubliczny.absolutePath),
                 arrayOf(mime),
-                null,
-            )
-            uri
+            ) { _, scannedUri ->
+                // Skonczono skanowanie
+            }
+
+            uri ?: Uri.fromFile(plikPubliczny)
         } catch (e: Exception) {
             null
         }
