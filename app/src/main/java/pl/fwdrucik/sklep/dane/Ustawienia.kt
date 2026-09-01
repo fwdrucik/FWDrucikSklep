@@ -56,8 +56,8 @@ const val DOMYSLNY_ADRES_WARSZTATU = "http://192.168.0.166:8770"
  */
 const val ADRES_ZDALNY_WARSZTATU = "http://100.84.198.20:8770"
 
-/** Najnowszy tekstowy, sprawdzony 31.08.2026. */
-const val DOMYSLNY_MODEL_OPISU = "gemini-3.7-flash"
+/** Główny model tekstowy: Gemini 3.6 Flash. */
+const val DOMYSLNY_MODEL_OPISU = "gemini-3.6-flash"
 
 /** Nano Banana 2 — obrazowy odpowiednik tej samej generacji. */
 const val DOMYSLNY_MODEL_OBRAZU = "gemini-3.1-flash-image"

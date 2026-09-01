@@ -607,12 +607,8 @@ class AgentProduktu(
     }
 
     private companion object {
-        // Wartosci awaryjne. Normalnie model przychodzi z ustawien — patrz
-        // DOMYSLNY_MODEL_OPISU w Ustawienia.kt.
-        const val MODEL_OPISU = "gemini-3.7-flash"
-
-        /** Rodzina zapasowa na wypadek chwilowego przeciążenia wybranego modelu. */
-        val MODELE_ZAPASOWE = listOf("gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite")
+        const val MODEL_OPISU = "gemini-3.6-flash"
+        val MODELE_ZAPASOWE = listOf("gemini-3.7-flash", "gemini-3.5-flash", "gemini-2.5-flash")
         const val MODEL_OBRAZU = "gemini-3.1-flash-image"
         const val MAKS_BOK = 1536
     }
