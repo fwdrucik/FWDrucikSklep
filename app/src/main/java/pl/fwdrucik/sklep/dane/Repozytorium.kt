@@ -15,6 +15,7 @@ import pl.fwdrucik.sklep.siec.SklepApi
 import pl.fwdrucik.sklep.siec.SerwerWarsztatu
 import pl.fwdrucik.sklep.siec.SlojNaCiastka
 import pl.fwdrucik.sklep.siec.StanZadania
+import pl.fwdrucik.sklep.siec.OdpowiedzZlecenia
 import retrofit2.HttpException
 import java.io.File
 import java.io.IOException
@@ -63,6 +64,15 @@ class Repozytorium(
         sloj.wyczysc()
     }
 
+    /**
+     * Kto jestem według serwera — sonda dla kontrolki w Pomocy.
+     *
+     * `auth.php?akcja=ja` to najtańsze zapytanie w całym API: nie dotyka bazy
+     * produktów, a odpowiada na oba pytania naraz — czy serwer żyje i czy
+     * sesja jeszcze jest ważna.
+     */
+    suspend fun ktoJestem(): Wynik<Uzytkownik?> = wywolaj { api.ja().uzytkownik }
+
     suspend fun produkty(): Wynik<List<Produkt>> = wywolaj { api.produkty().produkty }
 
     suspend fun zapisz(p: Produkt, cenaZl: String, cenaPromoZl: String): Wynik<OdpowiedzZapisu> =
@@ -92,8 +102,11 @@ class Repozytorium(
 
     suspend fun usunObraz(id: Int): Wynik<Unit> = wywolaj { api.usunObraz(id); Unit }
 
-    suspend fun statusZamowienia(id: Int, status: String): Wynik<Unit> =
-        wywolaj { api.ustawStatusZamowienia(id, status); Unit }
+    suspend fun statusZamowienia(
+        id: Int,
+        status: String,
+        przesylka: String = "",
+    ): Wynik<Unit> = wywolaj { api.ustawStatusZamowienia(id, status, przesylka.trim()); Unit }
 
     suspend fun zamowienia(): Wynik<List<Zamowienie>> = wywolaj { api.zamowienia().zamowienia }
 
@@ -104,24 +117,114 @@ class Repozytorium(
      * odczytać rozmiaru bez wczytania całości do pamięci, a serwer i tak odrzuca
      * pliki powyżej 6 MB (FW_MAX_OBRAZ_B).
      */
+    /**
+     * Film albo animacja do ogloszenia.
+     *
+     * POZYCJA 0 NIE JEST PRZYPADKIEM: material ruchomy ma stac przed zdjeciami.
+     * Klient na telefonie widzi pierwszy ekran i nic wiecej — film schowany pod
+     * galeria to film, ktorego nikt nie obejrzy.
+     *
+     * Rozszerzenie bierzemy z nazwy pliku, bo serwer po nim WSKAZUJE, czego
+     * szukac w zawartosci (o przyjeciu decyduje sygnatura, nie nazwa).
+     */
+    suspend fun wgrajPlikProduktu(
+        produktId: Int,
+        uri: Uri,
+        opis: String,
+        pozycja: Int = 0,
+    ): Wynik<PlikProduktu> = wywolaj {
+        val nazwaZrodla = uri.lastPathSegment.orEmpty()
+        val rozszerzenie = nazwaZrodla.substringAfterLast('.', "").lowercase()
+            .takeIf { it.length in 2..5 } ?: "mp4"
+        val typ = when (rozszerzenie) {
+            "gif" -> "image/gif"
+            "webm" -> "video/webm"
+            "mov" -> "video/quicktime"
+            else -> "video/mp4"
+        }
+
+        val plik = withContext(Dispatchers.IO) {
+            val tymczasowy = File.createTempFile("material", ".$rozszerzenie", kontekst.cacheDir)
+            kontekst.contentResolver.openInputStream(uri).use { we ->
+                requireNotNull(we) { "Nie udało się otworzyć pliku." }
+                tymczasowy.outputStream().use { wy -> we.copyTo(wy) }
+            }
+            tymczasowy
+        }
+
+        // Limity są takie same, jak po stronie serwera. Sprawdzamy je tutaj,
+        // żeby nie wysyłać przez sieć komórkową pliku, który i tak wróci
+        // błędem 422 po kilkudziesięciu sekundach.
+        val limit = if (rozszerzenie == "gif") MAKS_ANIMACJA_B else MAKS_WIDEO_B
+        if (plik.length() > limit) {
+            val maB = plik.length() / 1_048_576
+            plik.delete()
+            throw IOException(
+                "Materiał waży $maB MB, a serwer przyjmuje do ${limit / 1_048_576} MB."
+            )
+        }
+
+        val czesc = MultipartBody.Part.createFormData(
+            "plik", plik.name, plik.asRequestBody(typ.toMediaType())
+        )
+        try {
+            val odp = api.wgrajPlik(
+                produktId = pole(produktId.toString()),
+                opis = pole(opis),
+                pozycja = pole(pozycja.toString()),
+                plik = czesc,
+            )
+            odp.plik ?: throw IOException("Serwer nie odesłał danych pliku.")
+        } finally {
+            plik.delete()
+        }
+    }
+
     suspend fun wgrajZdjecie(produktId: Int, uri: Uri, alt: String, pozycja: Int): Wynik<Obraz> =
         wywolaj {
+            val sciezkaZrodla = uri.lastPathSegment.orEmpty()
+            val rozszerzenie = sciezkaZrodla.substringAfterLast('.', "").lowercase()
+                .takeIf { it in listOf("jpg", "jpeg", "png", "webp", "gif") } ?: "jpg"
             val plik = withContext(Dispatchers.IO) {
-                val tymczasowy = File.createTempFile("zdjecie", ".jpg", kontekst.cacheDir)
-                kontekst.contentResolver.openInputStream(uri).use { we ->
-                    requireNotNull(we) { "Nie udało się otworzyć zdjęcia." }
-                    tymczasowy.outputStream().use { wy -> we.copyTo(wy) }
+                if (rozszerzenie == "gif") {
+                    val tymczasowy = File.createTempFile("animacja", ".gif", kontekst.cacheDir)
+                    kontekst.contentResolver.openInputStream(uri).use { we ->
+                        requireNotNull(we) { "Nie udało się otworzyć animacji GIF." }
+                        tymczasowy.outputStream().use { wy -> we.copyTo(wy) }
+                    }
+                    tymczasowy
+                } else {
+                    val tymczasowy = File.createTempFile("zdjecie", ".jpg", kontekst.cacheDir)
+                    val bitmap = kontekst.contentResolver.openInputStream(uri).use { we ->
+                        android.graphics.BitmapFactory.decodeStream(we)
+                    } ?: throw IOException("Nie udało się zdekodować zdjęcia.")
+
+                    val maxWymiar = 1920
+                    val szerokosc = bitmap.width
+                    val wysokosc = bitmap.height
+                    val przeskalowany = if (szerokosc > maxWymiar || wysokosc > maxWymiar) {
+                        val skala = maxWymiar.toFloat() / maxOf(szerokosc, wysokosc)
+                        android.graphics.Bitmap.createScaledBitmap(
+                            bitmap,
+                            (szerokosc * skala).toInt(),
+                            (wysokosc * skala).toInt(),
+                            true
+                        )
+                    } else {
+                        bitmap
+                    }
+
+                    tymczasowy.outputStream().use { wy ->
+                        przeskalowany.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, wy)
+                    }
+                    if (przeskalowany != bitmap) {
+                        przeskalowany.recycle()
+                    }
+                    bitmap.recycle()
+                    tymczasowy
                 }
-                tymczasowy
             }
-            if (plik.length() > MAKS_ZDJECIE_B) {
-                plik.delete()
-                throw IOException(
-                    "Zdjęcie waży ${plik.length() / 1_048_576} MB, a serwer przyjmuje do 6 MB. " +
-                        "Zmniejsz je w galerii i spróbuj ponownie."
-                )
-            }
-            val typ = kontekst.contentResolver.getType(uri) ?: "image/jpeg"
+            val typ = if (rozszerzenie == "gif") "image/gif" else "image/jpeg"
             val czesc = MultipartBody.Part.createFormData(
                 "plik", plik.name, plik.asRequestBody(typ.toMediaType())
             )
@@ -153,6 +256,18 @@ class Repozytorium(
         zadanie: String,
         zdjecie: Uri,
         opis: String,
+        proporcje: String = "16:9",
+        /**
+         * Skad wziac adres, gdy polaczenie padnie w trakcie liczenia.
+         *
+         * Telefon potrafi przejsc z komorkowej na Wi-Fi w polowie zlecenia —
+         * wtedy dotychczasowe polaczenie umiera, a serwer liczy dalej.
+         *
+         * Stoi PRZED `postep`, zeby ten ostatni dalej dalo sie podac jako
+         * lambda na koncu wywolania — inaczej kazde istniejace wywolanie
+         * trzeba by przepisywac.
+         */
+        odswiezAdres: (suspend () -> String)? = null,
         postep: (String) -> Unit = {},
     ): Wynik<File> = wywolaj {
         val plikWejsciowy = withContext(Dispatchers.IO) {
@@ -168,24 +283,63 @@ class Repozytorium(
             val czesc = MultipartBody.Part.createFormData(
                 "plik", plikWejsciowy.name, plikWejsciowy.asRequestBody("image/jpeg".toMediaType())
             )
-            val zlecenie = warsztat.zlec(
-                adres = "$adres/zlec",
-                zadanie = pole(zadanie),
-                opis = pole(opis),
-                plik = czesc,
-            )
+            // Automatyczny failover miedzy siecia lokalna a Tailscale
+            var zlecenie: OdpowiedzZlecenia? = null
+            var adresTeraz = adres
+            val kandydaci = listOf(
+                adres,
+                if (adres.contains("100.84.198.20")) "http://192.168.0.166:8770" else "http://100.84.198.20:8770"
+            ).distinct()
 
-            if (!zlecenie.ok || zlecenie.id.isBlank()) {
-                throw IOException(zlecenie.blad.ifBlank { "Serwer warsztatowy odrzucił zlecenie." })
+            var ostatniBladZlecenia: Exception? = null
+            for (kandydat in kandydaci) {
+                try {
+                    val z = warsztat.zlec(
+                        adres = "$kandydat/zlec",
+                        zadanie = pole(zadanie),
+                        opis = pole(opis),
+                        proporcje = pole(
+                            if (proporcje in listOf("16:9", "9:16", "1:1")) proporcje else "16:9"
+                        ),
+                        plik = czesc,
+                    )
+                    if (z.ok && z.id.isNotBlank()) {
+                        zlecenie = z
+                        adresTeraz = kandydat
+                        break
+                    }
+                } catch (e: Exception) {
+                    ostatniBladZlecenia = e
+                }
             }
+
+            val zlecenieGotowe = zlecenie ?: throw (ostatniBladZlecenia ?: IOException("Serwer warsztatowy odrzucił zlecenie."))
 
             // Limit trzydziestu minut jest hojny celowo: tyle bierze najdłuższa
             // animacja. Przekroczenie znaczy, że coś stanęło, a nie że trwa.
             val koniec = System.currentTimeMillis() + 30 * 60 * 1000
             var stan: StanZadania
+            var bledySieci = 0
             while (true) {
                 delay(4000)
-                stan = warsztat.zadanie("$adres/zadanie/${zlecenie.id}")
+
+                stan = try {
+                    val s = warsztat.zadanie("$adresTeraz/zadanie/${zlecenieGotowe.id}")
+                    bledySieci = 0
+                    s
+                } catch (e: IOException) {
+                    bledySieci++
+                    if (bledySieci >= 8) {
+                        throw IOException(
+                            "Zerwane połączenie z komputerem. Robota może być gotowa — " +
+                                "sprawdź Studio, gdy sieć wróci."
+                        )
+                    }
+                    postep("czekam na sieć ($bledySieci/8)")
+                    odswiezAdres?.let { adresTeraz = it() }
+                    continue
+                }
+
                 postep(stan.stan)
                 if (stan.gotowe) break
                 stan.blad?.takeIf { it.isNotBlank() }?.let { throw IOException(it) }
@@ -199,9 +353,14 @@ class Repozytorium(
         }
 
         val wynikUrl = stanZadania.wynikUrl ?: throw IOException("Serwer nie oddał pliku wynikowego.")
-        val cialo = warsztat.pobierz("$adres$wynikUrl")
+        val adresWyniku = odswiezAdres?.invoke() ?: adres
+        val cialo = warsztat.pobierz("$adresWyniku$wynikUrl")
         withContext(Dispatchers.IO) {
-            val rozszerzenie = if (zadanie == "animacja") ".mp4" else ".png"
+            // Po PREFIKSIE, nie po dokladnej nazwie. Wczesniej tylko „animacja"
+            // dostawala .mp4, wiec film z Flow ladowal na dysku jako .png —
+            // odtwarzacz go otwieral, ale udostepnienie i zapis w galerii
+            // podawaly zly typ pliku.
+            val rozszerzenie = if (zadanie.startsWith("animacja")) ".mp4" else ".png"
             val cel = File.createTempFile("zwarsztatu", rozszerzenie, kontekst.cacheDir)
             cel.outputStream().use { wy ->
                 cialo.use { resBody ->
@@ -247,5 +406,11 @@ class Repozytorium(
 
     private companion object {
         const val MAKS_ZDJECIE_B = 6L * 1024 * 1024
+
+        // Te same granice, co w api/_pliki_produktu.php. Rozjazd w tych
+        // liczbach znaczylby albo odrzucenie pliku po wyslaniu, albo
+        // wyslanie 60 MB przez sim-kartke po nic.
+        const val MAKS_WIDEO_B = 64L * 1024 * 1024
+        const val MAKS_ANIMACJA_B = 16L * 1024 * 1024
     }
 }

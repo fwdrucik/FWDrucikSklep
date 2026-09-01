@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import pl.fwdrucik.sklep.BuildConfig
+import pl.fwdrucik.sklep.dane.KopiaRobocza
 import pl.fwdrucik.sklep.dane.Produkt
 import pl.fwdrucik.sklep.dane.Statusy
 import pl.fwdrucik.sklep.dane.groszeNaZlote
@@ -43,6 +44,9 @@ fun EkranProduktow(
     naEdycje: (Int) -> Unit,
     naStatus: (Int, String) -> Unit,
     naUsun: (Int) -> Unit,
+    kopie: List<KopiaRobocza> = emptyList(),
+    naOtworzKopie: (Int) -> Unit = {},
+    naUsunKopie: (Int) -> Unit = {},
 ) {
     var filtr by remember { mutableStateOf("wszystkie") }
     var doUsuniecia by remember { mutableStateOf<Produkt?>(null) }
@@ -68,7 +72,7 @@ fun EkranProduktow(
             }
         }
 
-        if (widoczne.isEmpty()) {
+        if (widoczne.isEmpty() && kopie.isEmpty()) {
             PustaLista(filtr)
         } else {
             LazyColumn(
@@ -76,6 +80,19 @@ fun EkranProduktow(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                // Kopie robocze na gorze i tylko przy filtrze „wszystkie" albo
+                // „szkic": to jeszcze nie sa produkty — serwer o nich nie wie,
+                // wiec nie mieszaja sie do listy opublikowanych.
+                if (kopie.isNotEmpty() && filtr in listOf("wszystkie", "szkic")) {
+                    items(kopie, key = { "kopia-" + it.id }) { kopia ->
+                        KartaKopii(
+                            kopia = kopia,
+                            naOtworz = { naOtworzKopie(kopia.id) },
+                            naUsun = { naUsunKopie(kopia.id) },
+                        )
+                    }
+                }
+
                 items(widoczne, key = { it.id }) { produkt ->
                     KartaProduktu(
                         produkt = produkt,
@@ -120,7 +137,7 @@ private fun KartaProduktu(
     naStatus: (String) -> Unit,
     naUsun: () -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(onClick = naEdycje, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             if (produkt.obrazy.isNotEmpty()) {
                 AsyncImage(
@@ -164,15 +181,15 @@ private fun KartaProduktu(
                     Modifier.padding(top = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    val nastepny = when (produkt.status) {
-                        "opublikowany" -> "ukryty"
-                        else -> "opublikowany"
-                    }
+                    // Trzy stany w kolku zamiast przelacznika na dwa.
+                    // Poprzednio z „ukryty" wracalo sie tylko do publikacji —
+                    // nie bylo jak powiedziec „wracam do roboty nad tym".
+                    val nastepny = Statusy.nastepnyProduktu(produkt.status)
                     AssistChip(
                         onClick = { naStatus(nastepny) },
                         label = {
                             Text(
-                                if (nastepny == "opublikowany") "Opublikuj" else "Ukryj",
+                                "${Statusy.nazwaProduktu(produkt.status)} → ${Statusy.nazwaProduktu(nastepny)}",
                                 maxLines = 1,
                             )
                         },
@@ -223,5 +240,48 @@ private fun PustaLista(filtr: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),
         )
+    }
+}
+
+/**
+ * Kopia robocza na liscie produktow — widoczna, ale wyraznie inna niz produkt.
+ *
+ * PO CO TU JEST: dotad niedokonczony szkic zylo wylacznie w kreatorze i o jego
+ * istnieniu mowil dopiero baner po ponownym wejsciu. Tutaj widac go od razu,
+ * razem z reszta roboty. Serwer o nim nie wie i klient go nie zobaczy —
+ * dlatego etykieta mowi wprost „prywatna".
+ */
+@Composable
+private fun KartaKopii(kopia: KopiaRobocza, naOtworz: () -> Unit, naUsun: () -> Unit) {
+    Card(onClick = naOtworz, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (kopia.zdjecie.isNotBlank()) {
+                AsyncImage(
+                    model = java.io.File(kopia.zdjecie),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(56.dp),
+                )
+            }
+            Column(Modifier.weight(1f).padding(start = if (kopia.zdjecie.isBlank()) 0.dp else 10.dp)) {
+                Text(
+                    kopia.nazwa.ifBlank { "Kopia robocza bez nazwy" },
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    "Kopia robocza — prywatna, tylko na tym telefonie" +
+                        if (kopia.zapisano > 0) {
+                            " · " + java.text.SimpleDateFormat("HH:mm", java.util.Locale("pl"))
+                                .format(java.util.Date(kopia.zapisano))
+                        } else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = naOtworz) { Text("Dokończ") }
+            TextButton(onClick = naUsun) { Text("Usuń") }
+        }
     }
 }

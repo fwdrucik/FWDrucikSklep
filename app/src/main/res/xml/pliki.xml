@@ -5,4 +5,15 @@
          adres content:// przez FileProvider. Bez tego Android rzuca
          FileUriExposedException i aparat sie nie otwiera. -->
     <cache-path name="zdjecia" path="zdjecia/" />
+
+    <!-- Wyniki z komputera w warsztacie (animacje, poprawione zdjecia) ladują
+         wprost w pamieci podrecznej, a nie w podkatalogu `zdjecia`. Bez tego
+         wpisu „Otworz w odtwarzaczu" i „Wyslij dalej" wywracaly aplikacje:
+         FileProvider zglaszal „Failed to find configured root that contains…". -->
+    <cache-path name="wyniki" path="." />
+
+    <!-- Kadry kopiowane do pamieci aplikacji, zeby nie gineły razem
+         z uprawnieniem do adresu z galerii. -->
+    <files-path name="kadry" path="kadry/" />
+    <files-path name="kopie" path="kopie/" />
 </paths>

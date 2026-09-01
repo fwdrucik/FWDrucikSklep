@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ikona aplikacji: logo F.W. DRUCIK na stalowym tle sklepu.
+
+  Pierwszy plan to bitmapa, nie wektor: logo jest rysunkiem z gradientami
+  i przerysowanie go sciezkami dawaloby cos podobnego, a nie to samo.
+  Wpisane w srodkowe 60 dp ze 108 dp plotna, wiec zadna maska systemowa —
+  kolo, kwadrat, kropla — nie utnie mu krawedzi.
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/tlo_ikony"/>
-    <foreground android:drawable="@drawable/ikona_pierwszy_plan"/>
+    <foreground android:drawable="@mipmap/ikona_przod"/>
 </adaptive-icon>

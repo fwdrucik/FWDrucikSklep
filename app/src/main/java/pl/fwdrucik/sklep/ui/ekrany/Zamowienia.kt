@@ -31,7 +31,7 @@ import pl.fwdrucik.sklep.dane.groszeNaZlote
 @Composable
 fun EkranZamowien(
     zamowienia: List<Zamowienie>,
-    naZmianeStatusu: (Int, String) -> Unit,
+    naZmianeStatusu: (Int, String, String) -> Unit,
 ) {
     if (zamowienia.isEmpty()) {
         Column(
@@ -65,7 +65,7 @@ fun EkranZamowien(
 @Composable
 private fun KartaZamowienia(
     zamowienie: Zamowienie,
-    naZmianeStatusu: (Int, String) -> Unit,
+    naZmianeStatusu: (Int, String, String) -> Unit,
 ) {
     var rozwiniete by remember { mutableStateOf(false) }
 
@@ -116,8 +116,11 @@ private fun KartaZamowienia(
                 Text("Klient", style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(top = 12.dp))
                 WierszDanych("Konto", zamowienie.nick)
-                zamowienie.adres.forEach { (klucz, wartosc) ->
-                    if (wartosc.isNotBlank()) WierszDanych(klucz, wartosc)
+                zamowienie.adres.forEach { (klucz, el) ->
+                    val wartosc = if (el is kotlinx.serialization.json.JsonPrimitive) el.content else el.toString()
+                    if (wartosc.isNotBlank() && klucz != "uzytkownik_id") {
+                        WierszDanych(klucz, wartosc)
+                    }
                 }
                 if (zamowienie.dostawa.isNotBlank()) {
                     WierszDanych("Dostawa", zamowienie.dostawa)
@@ -126,13 +129,41 @@ private fun KartaZamowienia(
                     WierszDanych("Zapłata", zamowienie.platnosc)
                 }
 
+                // Numer przesylki.
+                //
+                // PO CO TUTAJ, A NIE W OSOBNYM OKIENKU: wpisuje sie go dokladnie
+                // w tej samej chwili, w ktorej klika sie „Wyslane" — z listem
+                // przewozowym w drugiej rece. Osobny ekran znaczylby, ze polowa
+                // paczek pojedzie bez numeru, bo „dopisze sie pozniej".
+                var numerPrzesylki by androidx.compose.runtime.remember(zamowienie.id) {
+                    androidx.compose.runtime.mutableStateOf(zamowienie.przesylka)
+                }
+
+                androidx.compose.material3.OutlinedTextField(
+                    value = numerPrzesylki,
+                    onValueChange = { numerPrzesylki = it },
+                    label = { Text("Numer przesyłki") },
+                    placeholder = { Text("z listu przewozowego") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                )
+                Text(
+                    if (zamowienie.przesylka.isNotBlank())
+                        "Zapisany: " + zamowienie.przesylka
+                    else "Klient dostanie go mailem razem ze statusem „wysłane”.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
                 Text("Zmień status", style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Statusy.zamowienia.forEach { status ->
                         FilterChip(
                             selected = zamowienie.status == status,
-                            onClick = { naZmianeStatusu(zamowienie.id, status) },
+                            onClick = {
+                                naZmianeStatusu(zamowienie.id, status, numerPrzesylki.trim())
+                            },
                             label = { Text(Statusy.opisZamowienia(status), maxLines = 1) },
                         )
                     }

@@ -12,6 +12,7 @@
         android:dataExtractionRules="@xml/reguly_kopii"
         android:networkSecurityConfig="@xml/siec"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.FWDrucikSklep">
@@ -38,5 +39,37 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Przyjmuje klucz Gemini z komputera przez adb. Tylko zapis, nigdy odczyt -
+             szczegoly i uzasadnienie `exported` w OdbiorKlucza.kt. -->
+        <receiver
+            android:name=".praca.OdbiorKlucza"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="pl.fwdrucik.sklep.USTAW_KLUCZ" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Push o zamowieniach. Odpytywanie co 15 minut zostaje jako droga
+             zapasowa - patrz UslugaPowiadomien.kt. -->
+        <service
+            android:name=".praca.UslugaPowiadomien"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Kafelek na pulpicie: godzina, data i nowe zamowienia. -->
+        <receiver
+            android:name=".praca.WidgetSklepu"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_sklep_info" />
+        </receiver>
     </application>
 </manifest>

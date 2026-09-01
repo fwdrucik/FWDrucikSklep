@@ -74,6 +74,11 @@ class ObserwatorZamowien(
             powiadom(nowe.size, nowe.sumOf { it.sumaGr }, nowe.first().numer)
             magazyn.edit { it[OSTATNIE_ID] = najwyzsze }
         }
+
+        // Kafelek na pulpicie dostaje to samo, co powiadomienie — takze wtedy,
+        // gdy nowych nie ma. „Sprawdzone 12:40, bez nowych" to inna informacja
+        // niz cisza, bo mowi, ze aplikacja w ogole patrzyla.
+        WidgetSklepu.odswiez(applicationContext, nowe.size)
         return Result.success()
     }
 

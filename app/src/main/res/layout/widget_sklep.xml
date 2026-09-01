@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Kafelek sklepu na pulpicie. Zegar rysuje TextClock z systemu - odswieza sie
+  sam, bez budzenia aplikacji. Reszta zmienia sie tylko po sprawdzeniu zamowien.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_korzen"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="@drawable/tlo_widgetu">
+
+    <TextClock
+        android:id="@+id/widget_zegar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:format12Hour="HH:mm"
+        android:format24Hour="HH:mm"
+        android:textSize="30sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF" />
+
+    <TextClock
+        android:id="@+id/widget_data"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:format12Hour="EEEE, d MMMM"
+        android:format24Hour="EEEE, d MMMM"
+        android:textSize="12sp"
+        android:textColor="#B0BEC5" />
+
+    <TextView
+        android:id="@+id/widget_zamowienia"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="14sp"
+        android:textColor="#4FC3F7"
+        android:text="Sklep F.W. DRUCIK" />
+
+    <TextView
+        android:id="@+id/widget_sprawdzone"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="10sp"
+        android:textColor="#78909C" />
+</LinearLayout>

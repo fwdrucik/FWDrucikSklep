@@ -3,6 +3,7 @@ package pl.fwdrucik.sklep.siec
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -23,7 +24,23 @@ interface GeminiApi {
         @Query("key") klucz: String,
         @Body cialo: ZapytanieGemini,
     ): OdpowiedzGemini
+
+    /**
+     * Lista modeli — do sprawdzenia, czy klucz w ogóle działa.
+     *
+     * Celowo NIE sprawdzamy klucza próbnym zapytaniem do `generateContent`:
+     * tamto liczy się do limitu i kosztuje. Ta końcówka tylko wylicza modele,
+     * jest darmowa, a na zły klucz odpowiada tak samo — błędem 400/403.
+     */
+    @GET("v1beta/models")
+    suspend fun modele(@Query("key") klucz: String): OdpowiedzModeli
 }
+
+@Serializable
+data class OdpowiedzModeli(val models: List<ModelGemini> = emptyList())
+
+@Serializable
+data class ModelGemini(val name: String = "")
 
 // ------------------------------------------------------------------ zapytanie
 

@@ -25,6 +25,13 @@ import retrofit2.Retrofit
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.concurrent.TimeUnit
 
+import android.os.Build.VERSION.SDK_INT
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.decode.VideoFrameDecoder
+
 /**
  * Zależności aplikacji.
  *
@@ -32,7 +39,7 @@ import java.util.concurrent.TimeUnit
  * sieciowymi. Wstrzykiwanie przez adnotacje dołożyłoby KSP, dłuższą kompilację
  * i drugą tabelę zgodności wersji, a nie usunęłoby ani jednej linii tutaj.
  */
-class SklepAplikacja : Application() {
+class SklepAplikacja : Application(), ImageLoaderFactory {
 
     lateinit var repozytorium: Repozytorium
         private set
@@ -46,8 +53,29 @@ class SklepAplikacja : Application() {
     lateinit var warsztat: SerwerWarsztatu
         private set
 
+    /** Wystawiony osobno, bo kontrolka w Pomocy sprawdza klucz bez udziału agenta. */
+    lateinit var gemini: GeminiApi
+        private set
+
+    override fun newImageLoader(): ImageLoader {
+        return ImageLoader.Builder(this)
+            .components {
+                if (SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+                add(VideoFrameDecoder.Factory())
+            }
+            .crossfade(true)
+            .build()
+    }
+
     override fun onCreate() {
         super.onCreate()
+
+        // Push o zamowieniach zamiast czekania na kolejne odpytanie.
+        zapiszSieNaPowiadomienia()
 
         val sloj = SlojNaCiastka(this)
         val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
@@ -86,7 +114,7 @@ class SklepAplikacja : Application() {
             .build()
             .create(GeminiApi::class.java)
 
-        agent = AgentProduktu(gemini, this)
+        this.gemini = gemini
 
         // Serwer warsztatowy na komputerze. Osobny klient, bo to sasiad
         // w sieci domowej, a nie fwdrucik.pl — nie ma po co dostawac
@@ -109,6 +137,10 @@ class SklepAplikacja : Application() {
             .build()
             .create(SerwerWarsztatu::class.java)
 
+        // Agent dostaje OBA silniki: Gemini czyta zdjecie, Muse pisze tekst
+        // przez most na komputerze, gdy klucza Gemini brak albo zostal odrzucony.
+        agent = AgentProduktu(gemini, warsztat, this)
+
         repozytorium = Repozytorium(api, sloj, this, warsztat)
 
         zalozKanalPowiadomien()
@@ -127,27 +159,53 @@ class SklepAplikacja : Application() {
     }
 
     /**
-     * Sprawdzanie zamówień w tle.
+     * Zapasowe sprawdzanie zamówień w tle.
      *
-     * Co 15 minut, bo to najkrótszy odstęp, na jaki Android pozwala pracy
-     * cyklicznej — proszenie o mniej i tak zostałoby wydłużone przez system.
-     * Wymóg sieci jest po to, żeby nie budzić telefonu bez internetu.
+     * Od czasu wprowadzenia push-a (`UslugaPowiadomien`) to jest **druga
+     * droga**, nie pierwsza: powiadomienie przychodzi w ułamku sekundy, a to
+     * odpytywanie ma tylko złapać przypadki, w których push nie dotarł —
+     * telefon bez usług Google, wyłączona sieć, stojący nadawca.
+     *
+     * Odstęp podniesiony z 15 minut do godziny. Piętnaście minut miało sens,
+     * gdy było jedynym źródłem wiedzy o zamówieniu; przy działającym push-u
+     * budzenie telefonu cztery razy na godzinę jest tylko podatkiem od baterii.
      */
     private fun zaplanujSprawdzanieZamowien() {
-        val praca = PeriodicWorkRequestBuilder<ObserwatorZamowien>(15, TimeUnit.MINUTES)
+        val praca = PeriodicWorkRequestBuilder<ObserwatorZamowien>(1, TimeUnit.HOURS)
             .setConstraints(
                 Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
             )
             .build()
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             "obserwator-zamowien",
-            ExistingPeriodicWorkPolicy.KEEP,
+            // UPDATE, a nie KEEP: telefony, ktore maja juz zaplanowana prace
+            // co 15 minut, musza dostac nowy odstep. Przy KEEP stara praca
+            // zostalaby na zawsze.
+            ExistingPeriodicWorkPolicy.UPDATE,
             praca,
         )
     }
 
     companion object {
         const val KANAL_ZAMOWIENIA = "zamowienia"
+
+        /** Temat FCM, na ktory ida powiadomienia o zamowieniach. */
+        const val TEMAT_ZAMOWIENIA = "zamowienia-fwdrucik"
+
+        /**
+         * Zapisuje telefon na push o zamowieniach.
+         *
+         * Temat zamiast tokenu urzadzenia: nadawca nie musi prowadzic rejestru
+         * telefonow, a wymiana albo przeinstalowanie aplikacji niczego nie psuje.
+         * Wolamy to przy starcie i po kazdej zmianie tokenu — zapis jest
+         * bezpieczny do powtorzenia.
+         */
+        fun zapiszSieNaPowiadomienia() {
+            runCatching {
+                com.google.firebase.messaging.FirebaseMessaging.getInstance()
+                    .subscribeToTopic(TEMAT_ZAMOWIENIA)
+            }
+        }
 
         fun z(context: Context): SklepAplikacja =
             context.applicationContext as SklepAplikacja

@@ -4,6 +4,7 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import pl.fwdrucik.sklep.dane.OdpowiedzLogowania
 import pl.fwdrucik.sklep.dane.OdpowiedzObrazu
+import pl.fwdrucik.sklep.dane.OdpowiedzPliku
 import pl.fwdrucik.sklep.dane.OdpowiedzOgolna
 import pl.fwdrucik.sklep.dane.OdpowiedzProduktow
 import pl.fwdrucik.sklep.dane.OdpowiedzZamowien
@@ -82,6 +83,21 @@ interface SklepApi {
         @Part plik: MultipartBody.Part,
     ): OdpowiedzObrazu
 
+    /**
+     * Film, animacja GIF, model 3D albo szkic.
+     *
+     * Osobna koncowka od zdjec, bo serwer trzyma to w innej tabeli i rozpoznaje
+     * po sygnaturze pliku, a nie przez `getimagesize`.
+     */
+    @Multipart
+    @POST("api/sklep.php?akcja=plik-wgraj")
+    suspend fun wgrajPlik(
+        @Part("produkt_id") produktId: RequestBody,
+        @Part("opis") opis: RequestBody,
+        @Part("pozycja") pozycja: RequestBody,
+        @Part plik: MultipartBody.Part,
+    ): OdpowiedzPliku
+
     @FormUrlEncoded
     @POST("api/sklep.php?akcja=obraz-usun")
     suspend fun usunObraz(@Field("id") id: Int): OdpowiedzOgolna
@@ -94,5 +110,7 @@ interface SklepApi {
     suspend fun ustawStatusZamowienia(
         @Field("id") id: Int,
         @Field("status") status: String,
+        /** Pusty numer nie kasuje zapisanego — serwer zostawia wtedy poprzedni. */
+        @Field("przesylka") przesylka: String = "",
     ): OdpowiedzOgolna
 }

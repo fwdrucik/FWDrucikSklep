@@ -100,6 +100,42 @@ object MostChmury {
         }.getOrDefault(0)
     }
 
+    /**
+     * Sprawdzenie połączenia z chmurą — dla kontrolki w Pomocy.
+     *
+     * Zwraca `null`, gdy wszystko gra, albo zdanie z przyczyną. Czyta jeden
+     * dokument zamiast pisać: zapis testowy zostawiałby śmieci we wspólnej
+     * bazie, którą widzi też panel warsztatowy.
+     *
+     * Rozróżnienie przyczyn jest tu ważniejsze niż zwykle. „Zły klucz",
+     * „reguły nie puszczają" i „nie ma sieci" wymagają trzech różnych ruchów,
+     * a wyglądają na ekranie tak samo — jako „nie działa".
+     */
+    suspend fun sprawdz(context: Context, cfg: TrojkaFirebase): String? =
+        withContext(Dispatchers.IO) {
+            if (!cfg.gotowa) return@withContext "Nie wypełnione pola połączenia."
+            val app = aplikacja(context, cfg)
+                ?: return@withContext "Nie udało się założyć połączenia z tymi danymi."
+
+            runCatching {
+                val auth = FirebaseAuth.getInstance(app)
+                if (auth.currentUser == null) czekaj(auth.signInAnonymously())
+                czekaj(FirebaseFirestore.getInstance(app).collection(KOLEKCJA).limit(1).get())
+                null
+            }.getOrElse { e ->
+                val tresc = e.message ?: e::class.java.simpleName
+                when {
+                    "PERMISSION_DENIED" in tresc.uppercase() ->
+                        "Baza odpowiada, ale reguły nie puszczają — sprawdź firestore.rules."
+                    "API key not valid" in tresc || "API_KEY" in tresc.uppercase() ->
+                        "Klucz API nie jest poprawny dla tego projektu."
+                    "ADMIN_ONLY_OPERATION" in tresc.uppercase() || "CONFIGURATION_NOT_FOUND" in tresc.uppercase() ->
+                        "Logowanie anonimowe wyłączone w konsoli Firebase."
+                    else -> tresc.take(120)
+                }
+            }
+        }
+
     private suspend fun <T> czekaj(task: com.google.android.gms.tasks.Task<T>): T =
         suspendCancellableCoroutine { cont ->
             task.addOnSuccessListener { if (cont.isActive) cont.resume(it) }

@@ -4,6 +4,7 @@ import java.math.BigDecimal
 import java.util.Locale
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /**
  * Odpowiedniki tego, co oddaje api/sklep.php. Nazwy pól są celowo takie same
@@ -67,8 +68,15 @@ data class Zamowienie(
     val utworzone: String = "",
     val dostawa: String = "",
     val platnosc: String = "",
+    /**
+     * Numer listu przewozowego. Pusty, dopoki paczka nie wyszla.
+     *
+     * Trafia do maila, ktory sklep wysyla klientowi przy statusie „wyslane" —
+     * to jedyna droga, ktora ma kupujacy bez konta.
+     */
+    val przesylka: String = "",
     val pozycje: List<PozycjaZamowienia> = emptyList(),
-    val adres: Map<String, String> = emptyMap(),
+    val adres: Map<String, JsonElement> = emptyMap(),
 )
 
 // ------------------------------------------------------------- odpowiedzi
@@ -90,6 +98,27 @@ data class OdpowiedzZapisu(
 @Serializable
 data class OdpowiedzObrazu(val ok: Boolean = false, val obraz: Obraz? = null)
 
+/**
+ * Plik produktu, ktory nie jest zdjeciem: film, animacja, model 3D albo szkic.
+ *
+ * Osobno od `Obraz`, bo nie ma szerokosci ani wysokosci, za to ma rodzaj
+ * i typ MIME — po nich sklep decyduje, czy pokazac odtwarzacz, ruchomy
+ * obrazek czy odnosnik do pobrania.
+ */
+@Serializable
+data class PlikProduktu(
+    val id: Int = 0,
+    val src: String = "",
+    /** „wideo", „animacja", „model" albo „szkic" — prosto z api/sklep.php. */
+    val rodzaj: String = "",
+    val mime: String = "",
+    val opis: String = "",
+    val rozmiar: Long = 0,
+)
+
+@Serializable
+data class OdpowiedzPliku(val ok: Boolean = false, val plik: PlikProduktu? = null)
+
 @Serializable
 data class Uzytkownik(
     val id: Int = 0,
@@ -110,15 +139,85 @@ data class OdpowiedzLogowania(
 @Serializable
 data class OdpowiedzOgolna(val ok: Boolean = false, val blad: String = "", val status: String = "")
 
+/**
+ * Pamiec robocza kreatora — to, co wpisales, zanim cokolwiek poszlo na serwer.
+ *
+ * PO CO: szkic powstaje przy stole, jedna reka, czesto z telefonem odkladanym
+ * w polowie. Dotad przerwana proba znikala bez sladu — telefon uspiony przez
+ * system albo cofniecie z kreatora kasowalo dziesiec minut pisania razem
+ * z opisem od agenta, ktory kosztowal zapytanie do Gemini.
+ *
+ * Kopia siedzi wylacznie na telefonie i nie ma nic wspolnego ze statusem
+ * produktu w sklepie: `szkic` to stan NA SERWERZE, a to jest zapis roboczy,
+ * o ktorym serwer nic nie wie.
+ */
+@Serializable
+data class KopiaRobocza(
+    /** 0 dla nowego produktu; id istniejacego przy poprawianiu. */
+    val id: Int = 0,
+    val nazwa: String = "",
+    val kategoria: String = "",
+    @SerialName("opis_krotki") val opisKrotki: String = "",
+    val opis: String = "",
+    val cena: String = "",
+    @SerialName("cena_promo") val cenaPromo: String = "",
+    val stan: String = "",
+    val jednostka: String = "",
+    val waga: String = "",
+    val czas: String = "",
+    val status: String = "szkic",
+    val pozycja: String = "",
+    val notatka: String = "",
+    @SerialName("opis_zdjecia") val opisZdjecia: String = "",
+    /**
+     * Sciezka do KOPII zdjecia w pamieci aplikacji, nie adres z galerii.
+     *
+     * Adres `content://` z galerii jest wazny tylko dopoty, dopoki zyje
+     * uprawnienie nadane przy wyborze — po restarcie aplikacji wskazuje
+     * w prozne. Dlatego przy pierwszym zapisie kopiujemy plik do siebie.
+     */
+    val zdjecie: String = "",
+    val dodatkoweKadry: List<String> = emptyList(),
+    val animacja: String = "",
+    val sekcjaOtwarta: Int = 1,
+    /** Kiedy zapisana — millisekundy, do pokazania godziny na banerze. */
+    val zapisano: Long = 0,
+) {
+    /** Pusta kopia nie ma czego przywracac — nie zawracamy nia glowy. */
+    val pusta: Boolean
+        get() = listOf(nazwa, opisKrotki, opis, cena, notatka, zdjecie, animacja).all { it.isBlank() } && dodatkoweKadry.isEmpty()
+}
+
 /** Statusy przepisane z FW_STATUSY_* w api/_sklep.php. */
 object Statusy {
     val produktu = listOf("szkic", "opublikowany", "ukryty")
     val zamowienia = listOf("nowe", "oplacone", "w_realizacji", "wyslane", "zakonczone", "anulowane")
 
+    /** Krotka nazwa na przycisk — tak, jak sie o tym mowi na co dzien. */
+    fun nazwaProduktu(status: String) = when (status) {
+        "opublikowany" -> "Publiczny"
+        "ukryty" -> "Prywatny"
+        else -> "W przygotowaniu"
+    }
+
+    /** Zdanie wyjasniajace, co ten stan naprawde znaczy dla klienta. */
     fun opisProduktu(status: String) = when (status) {
         "opublikowany" -> "Widoczny w sklepie"
         "ukryty" -> "Schowany przed klientami"
         else -> "Szkic — tylko dla Ciebie"
+    }
+
+    /**
+     * Nastepny stan w kolku: w przygotowaniu -> publiczny -> prywatny -> ...
+     *
+     * Kolejnosc nie jest przypadkowa: z przygotowania idzie sie do publikacji,
+     * a wycofanie ze sklepu to krok dalej, nie powrot do szkicu. Szkic znaczy
+     * „jeszcze nad tym pracuje", prywatny znaczy „gotowe, ale nie teraz".
+     */
+    fun nastepnyProduktu(status: String) = when (status) {
+        "szkic" -> "opublikowany"
+        "opublikowany" -> "ukryty"
+        else -> "szkic"
     }
 
     fun opisZamowienia(status: String) = when (status) {

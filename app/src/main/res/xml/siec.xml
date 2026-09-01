@@ -8,6 +8,13 @@
          fwdrucik.pl, dalej wymaga HTTPS. -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">192.168.0.166</domain>
+
+        <!-- Adres komputera w sieci Tailscale. Dzieki niemu telefon dosiega
+             warsztatu z DOWOLNEJ sieci — z pracy, z terenu, przez komorke —
+             bez wystawiania serwera na internet i bez przekierowan na routerze.
+             Ruch jest szyfrowany przez sam Tailscale, wiec czysty HTTP w srodku
+             tunelu jest tu bezpieczny. -->
+        <domain includeSubdomains="false">100.84.198.20</domain>
         <domain includeSubdomains="false">10.0.2.2</domain>
         <domain includeSubdomains="false">127.0.0.1</domain>
         <domain includeSubdomains="false">localhost</domain>
