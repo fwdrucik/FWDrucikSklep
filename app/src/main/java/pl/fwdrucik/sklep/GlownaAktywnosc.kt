@@ -130,15 +130,7 @@ private fun Aplikacja(startowyEkran: String?) {
             edytowany = stan.aktywnyKreatorId
         }
     }
-
-    LaunchedEffect(edytowany) {
-        android.util.Log.d("FW_KREATOR", "LaunchedEffect edytowany=$edytowany, aktywnyKreatorId=${stan.aktywnyKreatorId}")
-        if (edytowany >= 0 && stan.aktywnyKreatorId != edytowany) {
-            model.ustawAktywnyKreator(edytowany)
-        }
-    }
-
-    BackHandler(enabled = edytowany < 0) {
+    BackHandler(enabled = true) {
         if (zakladka != Zakladka.Produkty) {
             zakladka = Zakladka.Produkty
         } else {
@@ -181,49 +173,12 @@ private fun Aplikacja(startowyEkran: String?) {
         return
     }
 
-    if (edytowany >= 0) {
-        EkranKreatora(
-            istniejacy = if (edytowany > 0) model.znajdz(edytowany) else null,
-            agentPracuje = stan.agentPracuje,
-            maKluczGemini = stan.kluczGemini.isNotBlank(),
-            kopia = stan.kopieRobocze[if (edytowany > 0) edytowany else 0],
-            naZapiszKopie = model::zapiszKopie,
-            naOdrzucKopie = model::skasujKopie,
-            naOpiszZeZdjecia = model::opiszZeZdjecia,
-            naPoprawZdjecie = model::poprawZdjecie,
-            naPoprawOpis = model::poprawOpis,
-            modeleTekstowe = stan.modeleTekstowe,
-            modeleObrazowe = stan.modeleObrazowe,
-            modelOpisu = stan.modelOpisu,
-            modelObrazu = stan.modelObrazu,
-            museDostepny = stan.museWarsztatu == "dostepne",
-            forgeDziala = stan.stanForge == "dziala",
-            comfyDziala = stan.stanComfy == "dziala",
-            flowDziala = stan.stanFlow == "dziala",
-            metaDziala = stan.stanMeta == "dziala",
-            copilotDziala = stan.stanCopilot == "dziala",
-            silnikAnimacji = model.silnikDo("animacja"),
-            czynnosci = stan.czynnosci,
-            naZapisz = { produkt, cena, promo, zdjecie, dodatkowe, animacja, alt ->
-                model.zapiszZeZdjeciami(produkt, cena, promo, zdjecie, dodatkowe, animacja, alt) { nowyId ->
-                    // Po zapisie nowego produktu zostajemy w kreatorze — teraz da
-                    // się dodać kolejne zdjęcia, bo serwer zna już identyfikator.
-                    if (edytowany == 0) edytowany = nowyId
-                }
-            },
-            warsztatGotowy = stan.swiatloWarsztatu in listOf("zielony", "zolty", "czerwony"),
-            naZlecWarsztatowi = model::zlecWarsztatowi,
-            naWgrajPlik = model::wgrajPlikDoOgloszenia,
-            naCiagAuto = model::ciagAutomatyczny,
-            naWgrajZdjecie = model::wgrajZdjecie,
-            naUsunZdjecie = model::usunZdjecie,
-            naPobierzZdjecieProduktu = model::pobierzZdjecieProduktu,
-            naWyjscie = {
-                edytowany = -1
-                model.zamknijKreator()
-            },
+    val otworzKreator = { id: Int ->
+        context.startActivity(
+            android.content.Intent(context, KreatorAktywnosc::class.java).apply {
+                putExtra(KreatorAktywnosc.EKSTRA_ID, id)
+            }
         )
-        return
     }
 
     val nowe = stan.zamowienia.count { it.status == "nowe" }
@@ -232,32 +187,20 @@ private fun Aplikacja(startowyEkran: String?) {
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(zakladka.etykieta)
                         Spacer(Modifier.padding(horizontal = 4.dp))
-                        pl.fwdrucik.sklep.ui.ekrany.PasekKropekStanu(
-                            stanApi = stan.stanApi.kolor,
-                            stanGemini = stan.stanGemini.kolor,
-                            stanChmury = stan.stanChmury.kolor,
-                            stanWarsztatu = stan.swiatloWarsztatu,
-                            stanMuse = stan.museWarsztatu,
-                            stanForge = stan.stanForge,
-                            stanComfy = stan.stanComfy,
-                            stanFlow = stan.stanFlow,
-                            stanMeta = stan.stanMeta,
-                            stanCopilot = stan.stanCopilot,
-                            naKlik = { zakladka = Zakladka.Studio },
+                        KontrolkaWarsztatu(
+                            swiatlo = stan.swiatloWarsztatu,
+                            opis = stan.opisWarsztatu,
+                            naDotkniecie = { zakladka = Zakladka.Studio },
                         )
-                        Spacer(Modifier.weight(1f))
-                        ZegarZData()
                     }
                 },
                 actions = {
+                    ZegarZData()
                     IconButton(onClick = model::wyloguj) {
-                        Icon(Icons.Filled.Logout, contentDescription = "Wyloguj")
+                        Icon(Icons.Filled.Logout, contentDescription = "Wyloguj ze sklepu")
                     }
                 },
             )
@@ -299,10 +242,7 @@ private fun Aplikacja(startowyEkran: String?) {
         },
         floatingActionButton = {
             if (zakladka == Zakladka.Produkty) {
-                FloatingActionButton(onClick = {
-                    edytowany = 0
-                    model.ustawAktywnyKreator(0)
-                }) {
+                FloatingActionButton(onClick = { otworzKreator(0) }) {
                     Icon(Icons.Filled.Add, contentDescription = "Dodaj produkt")
                 }
             }
@@ -316,17 +256,11 @@ private fun Aplikacja(startowyEkran: String?) {
             when (zakladka) {
                 Zakladka.Produkty -> EkranProduktow(
                     produkty = stan.produkty,
-                    naEdycje = {
-                        edytowany = it
-                        model.ustawAktywnyKreator(it)
-                    },
+                    naEdycje = { otworzKreator(it) },
                     naStatus = model::zmienStatus,
                     naUsun = model::usun,
                     kopie = stan.kopieRobocze.values.sortedByDescending { it.zapisano },
-                    naOtworzKopie = { id ->
-                        edytowany = id
-                        model.ustawAktywnyKreator(id)
-                    },
+                    naOtworzKopie = { otworzKreator(it) },
                     naUsunKopie = model::skasujKopie,
                 )
                 Zakladka.Magazyn -> EkranMagazynu(
