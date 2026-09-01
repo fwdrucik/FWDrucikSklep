@@ -6,6 +6,8 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -916,25 +918,29 @@ fun EkranKreatora(
             // Pojedyncze akcje narzędziowe
             Row(
                 Modifier.fillMaxWidth().padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 OutlinedButton(
                     onClick = { pytanieOSilnik = "opis" },
                     enabled = lokalneZdjecie != null && !agentPracuje,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).defaultMinSize(minHeight = 38.dp),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
                 ) {
-                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Opis")
+                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("Opis", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelMedium)
                 }
                 OutlinedButton(
                     onClick = { pytanieOZadaniuZdjecia = true },
                     enabled = lokalneZdjecie != null && !agentPracuje,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).defaultMinSize(minHeight = 38.dp),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
                 ) {
-                    Icon(Icons.Filled.PhotoFilter, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Tło / Kadr")
+                    Icon(Icons.Filled.PhotoFilter, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("Tło / Kadr", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall)
                 }
                 OutlinedButton(
                     onClick = {
@@ -943,11 +949,13 @@ fun EkranKreatora(
                         }
                     },
                     enabled = lokalneZdjecie != null && !agentPracuje,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).defaultMinSize(minHeight = 38.dp),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
                 ) {
-                    Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Wideo")
+                    Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("Wideo", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelMedium)
                 }
             }
 
