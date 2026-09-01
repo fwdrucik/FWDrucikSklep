@@ -203,35 +203,36 @@ fun EkranInstrukcji(
                     )
 
                     WyborSilnika(
-                        tytul = "Opisy",
-                        wybrany = silnikOpisu,
+                        tytul = "Domyślny agent opisów",
+                        wybrany = silnikOpisu.takeIf { it != "auto" } ?: "gemini",
                         opcje = listOf(
-                            "auto" to "Auto",
-                            "gemini" to "Gemini",
-                            "muse" to "Muse",
+                            "gemini" to "Google Gemini",
+                            "meta" to "Meta AI",
                             "copilot" to "Copilot",
+                            "muse" to "Muse Code",
                         ),
                         naWybor = { naZapiszSilnik("opis", it) },
                     )
                     WyborSilnika(
-                        tytul = "Poprawa zdjec",
-                        wybrany = silnikZdjecia,
+                        tytul = "Domyślny agent zdjęć",
+                        wybrany = silnikZdjecia.takeIf { it != "auto" } ?: "meta",
                         opcje = listOf(
-                            "auto" to "Auto",
-                            "forge" to "Forge",
                             "meta" to "Meta AI",
+                            "forge" to "RTX 5070 (Rembg)",
+                            "flow" to "Google Flow",
                             "copilot" to "Copilot",
+                            "gemini" to "Google Gemini",
                         ),
                         naWybor = { naZapiszSilnik("zdjecie", it) },
                     )
                     WyborSilnika(
-                        tytul = "Animacje",
-                        wybrany = silnikAnimacji,
+                        tytul = "Domyślny agent animacji",
+                        wybrany = silnikAnimacji.takeIf { it != "auto" } ?: "meta",
                         opcje = listOf(
-                            "auto" to "Auto",
-                            "comfy" to "Karta (5 s, 0 zl)",
-                            "flow" to "Veo (8 s, dzwiek, 20 pkt)",
-                            "meta" to "Meta AI (5 s, 0 zl)",
+                            "meta" to "Meta AI (GIF 360°)",
+                            "flow" to "Google Flow (Veo)",
+                            "gemini" to "Google Gemini (Veo)",
+                            "comfy" to "RTX 5070 (ComfyUI)",
                         ),
                         naWybor = { naZapiszSilnik("animacja", it) },
                     )

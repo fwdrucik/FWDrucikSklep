@@ -104,6 +104,21 @@ interface SerwerWarsztatu {
         @Field("prompt") prompt: String,
     ): OdpowiedzMuse
 
+    @Multipart
+    @POST
+    suspend fun metaZeZdjeciem(
+        @Url adres: String,
+        @Part plik: MultipartBody.Part,
+        @Part("prompt") prompt: RequestBody,
+    ): OdpowiedzMuse
+
+    @FormUrlEncoded
+    @POST
+    suspend fun meta(
+        @Url adres: String,
+        @Field("prompt") prompt: String,
+    ): OdpowiedzMuse
+
     @GET
     suspend fun zadanie(@Url adres: String): StanZadania
 

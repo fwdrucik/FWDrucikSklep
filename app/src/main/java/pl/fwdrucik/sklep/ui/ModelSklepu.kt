@@ -677,40 +677,17 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
     }
 
     /**
-     * Cały ciąg obróbki jednym kliknięciem: tło → upiększanie → animacja.
-     *
-     * PO CO: te trzy kroki i tak robi się po kolei na tym samym zdjęciu, a każdy
-     * z nich to osobne okienko, osobny wybór silnika i osobne czekanie. Przy
-     * dziesięciu wyrobach to trzydzieści decyzji, z których żadna nie jest
-     * ciekawa. Tutaj podejmuje je agregator — ten sam, który stoi za wyborem
-     * „Automatycznie" — a człowiek dostaje gotowy komplet.
-     *
-     * WYNIK KROKU JEST WEJŚCIEM NASTĘPNEGO. Kolejność nie jest dowolna:
-     * najpierw znika tło (maską, deterministycznie), potem poprawiamy światło
-     * na czystym kadrze, a dopiero na końcu animujemy gotowy obraz. Odwrotnie
-     * animacja pokazywałaby stary bałagan w tle, a poprawa światła walczyłaby
-     * z cieniami, których już nie ma.
-     *
-     * Każdy krok wybiera silnik osobno, bo w trakcie liczenia coś może paść
-     * albo wstać — Forge bywa zajęty, klucz Gemini potrafi trafić w limit.
-     *
-     * Animacja jest krokiem OPCJONALNYM w tym sensie, że jej awaria nie kasuje
-     * poprawionego zdjęcia: kadr zostaje, a błąd trafia na ekran.
+     * Cały ciąg obróbki wybranym agentem: tło → upiększanie → animacja.
      */
     fun ciagAutomatyczny(
         zdjecie: Uri,
         coTo: String,
         proporcje: String,
         dodatkowe: String,
+        wybranySilnik: String = "meta",
         gotoweZdjecie: (Uri) -> Unit,
         gotowaAnimacja: (Uri) -> Unit,
     ) {
-        // Dopisek czlowieka doklejamy do KAZDEGO kroku. Brzmi to jak nadmiar,
-        // ale „bez zoltego odcienia" albo „nie ruszaj napisu na spodzie" dotyczy
-        // calej obrobki, a nie tylko tego kroku, w ktorym akurat zostalo wpisane.
-        // Dopisek ucinamy na 300 znakach. Prompt idzie do modelu razem
-        // z poleceniem zadania; wklejona strona tekstu nie doda niczego,
-        // za to potrafi przykryc warunek „nie zmieniaj wyrobu".
         val dopisek = dodatkowe.trim().take(300)
 
         fun zDopiskiem(polecenie: String): String =
@@ -723,10 +700,6 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
             return
         }
 
-        // Drugie klikniecie nie ma prawa puscic drugiego lancucha rownolegle:
-        // oba pisalyby po tym samym stanie, a serwer i tak wykonuje zlecenia
-        // po jednym, wiec drugi ciag tylko czekalby w kolejce i mieszal
-        // komunikaty.
         if (_stan.value.agentPracuje) {
             _stan.update { it.copy(komunikat = "Poczekaj — poprzednia robota jeszcze trwa.") }
             return
@@ -734,25 +707,18 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
 
         viewModelScope.launch {
             _stan.update { it.copy(agentPracuje = true, komunikat = "Krok 1 z 3: wycinam tło...") }
-            // Adres sprawdzony raz, na poczatku lancucha — trzy kroki ida tym
-            // samym polaczeniem, wiec przelaczenie sieci w polowie ciagu
-            // zerwaloby dopiero krok drugi albo trzeci.
             val adres = adresRoboczy()
             try {
 
             // --- krok 1: tło
-            val silnikTla = silnikDo("zdjecie")
-            // Gemini NIE MA tu swojej drogi: jego obrazy idą przez `agent`,
-            // a cały ciąg jedzie przez serwer warsztatowy. Zamiast po cichu
-            // podmieniać silnik, wpisujemy to wprost — Forge robi w tym kroku
-            // dokładnie to, o co chodzi (maska, nie domysł modelu).
-            val zadanieTla = when (silnikTla) {
+            val silnikTla = wybranySilnik
+            val zadanieTla = when (wybranySilnik) {
                 "meta" -> "zdjecie-meta"
                 "flow" -> "zdjecie-flow"
                 "copilot" -> "zdjecie-copilot"
                 "gemini" -> "zdjecie-gemini"
                 "forge" -> "zdjecie-produktowe"
-                else -> "zdjecie-produktowe"
+                else -> "zdjecie-meta"
             }
             val poTle = repozytorium.zlecWarsztatowi(
                 adres, zadanieTla, zdjecie, zDopiskiem(Polecenia.tlo(coTo)), proporcje,
@@ -771,14 +737,14 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
 
             // --- krok 2: upiększanie
             _stan.update { it.copy(komunikat = "Krok 2 z 3: poprawiam światło...") }
-            val silnikSwiatla = silnikDo("zdjecie")
-            val zadanieSwiatla = when (silnikSwiatla) {
+            val silnikSwiatla = wybranySilnik
+            val zadanieSwiatla = when (wybranySilnik) {
                 "meta" -> "zdjecie-meta"
                 "flow" -> "zdjecie-flow"
                 "copilot" -> "zdjecie-copilot"
                 "gemini" -> "zdjecie-gemini"
                 "forge" -> "zdjecie-produktowe"
-                else -> "zdjecie-produktowe"
+                else -> "zdjecie-meta"
             }
             val poSwietle = repozytorium.zlecWarsztatowi(
                 adres, zadanieSwiatla, kadrBezTla, zDopiskiem(Polecenia.upieksz(coTo)), proporcje,
@@ -812,13 +778,13 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
 
             // --- krok 3: animacja
             _stan.update { it.copy(komunikat = "Krok 3 z 3: animuję (to potrwa)...") }
-            val silnikRuchu = silnikDo("animacja")
-            val zadanieRuchu = when (silnikRuchu) {
-                "flow" -> "animacja-flow"
+            val silnikRuchu = wybranySilnik
+            val zadanieRuchu = when (wybranySilnik) {
                 "meta" -> "animacja-meta"
+                "flow" -> "animacja-flow"
                 "gemini" -> "animacja-gemini"
-                "comfy" -> "animacja"
-                else -> "animacja"
+                "forge", "comfy" -> "animacja"
+                else -> "animacja-meta"
             }
             val poRuchu = repozytorium.zlecWarsztatowi(
                 adres, zadanieRuchu, kadrGotowy, zDopiskiem(Polecenia.obrot(coTo)), proporcje,
@@ -831,31 +797,20 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                         poRuchu.dane,
                         czyWideo = true,
                     )
-                    gotowaAnimacja(Uri.fromFile(poRuchu.dane))
-                    dopiszCzynnosc("Ciąg auto — animacja", silnikRuchu, "gotowe", poRuchu.dane.absolutePath)
-                    _stan.update {
-                        it.copy(komunikat = "Gotowe: tło, światło i animacja. Wszystko zapisane w galerii.")
-                    }
+                    val uri = Uri.fromFile(poRuchu.dane)
+                    dopiszCzynnosc("Ciąg auto — animacja", silnikRuchu, "gotowe", uri.path.orEmpty())
+                    gotowaAnimacja(uri)
+                    _stan.update { it.copy(komunikat = "Ciąg zakończony pomyślnie!") }
                 }
                 is Wynik.Blad -> {
-                    dopiszCzynnosc("Ciąg auto — animacja", silnikRuchu, poRuchu.komunikat.take(90), udana = false)
-                    _stan.update {
-                        it.copy(blad = "Zdjęcie gotowe, animacja nie wyszła: " + poRuchu.komunikat)
-                    }
+                    dopiszCzynnosc(
+                        "Ciąg auto — animacja", silnikRuchu,
+                        poRuchu.komunikat.take(90), udana = false,
+                    )
+                    _stan.update { it.copy(blad = poRuchu.komunikat) }
                 }
             }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                // Anulowanie to nie awaria — leci dalej, zeby korutyna
-                // naprawde sie zakonczyla. `finally` i tak zgasi „pracuje".
-                throw e
-            } catch (e: Exception) {
-                _stan.update { it.copy(blad = opisBledu(e)) }
             } finally {
-                // JEDNO miejsce, w ktorym gasnie „pracuje".
-                //
-                // Wczesniej ustawialo sie to w trzech galeziach z osobna,
-                // wiec kazdy wyjatek spoza tych galezi zostawial aplikacje
-                // z zablokowanymi przyciskami az do ponownego uruchomienia.
                 _stan.update { it.copy(agentPracuje = false) }
             }
         }
@@ -876,7 +831,9 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
     }
 
     /**
-     * Zdjęcie plus notatka w rodzaju „fioletowy brelok” — agent zwraca komplet
+     * Propozycja opisu ze zdjęcia i krótkiej notatki.
+     *
+     * Zwraca `SzkicProduktu`, który ekran kreatora może wstawić do odpowiednich
      * pól kreatora. Wynik trafia do wywołania zwrotnego, a nie do stanu, bo
      * pola kreatora są jego lokalnym stanem i użytkownik może je jeszcze poprawić.
      */
@@ -890,58 +847,37 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
         val klucz = _stan.value.kluczGemini
         val adres = _stan.value.adresWarsztatu
 
-        if (klucz.isBlank() && adres.isBlank()) {
-            _stan.update {
-                it.copy(blad = "Wpisz klucz Gemini albo adres komputera w zakładce Pomoc.")
-            }
-            return
-        }
-
         viewModelScope.launch {
             _stan.update { it.copy(agentPracuje = true) }
             try {
-                // Gemini pierwszy, bo jako jedyny WIDZI zdjęcie. Muse czyta sam
-                // tekst, więc bez notatki nie ma z czego pisać — i tak jest
-                // uczciwiej niż zgadywanie materiału po nazwie.
-                // Wybor z okienka ma pierwszenstwo nad ustawieniem w Pomocy:
-                // przy stole decyduje to, co widac teraz, a nie co bylo wczoraj.
-                val wybrany = silnikWybrany?.takeIf { it != "auto" }
-                    ?: silnikDo("opis", maZdjecie = true, maNotatke = notatka.isNotBlank())
-                val szkic = when (wybrany) {
+                val szkic = when (silnikWybrany) {
+                    "meta" -> {
+                        if (adres.isBlank()) throw java.io.IOException("Agent Meta AI wymaga włączonego serwera warsztatu (wpisz adres w zakładce Pomoc).")
+                        agent.opiszPrzezMete(adres, notatka, _stan.value.poprawki, zdjecie)
+                    }
                     "copilot" -> {
-                        if (adres.isBlank()) throw java.io.IOException("Microsoft Copilot wymaga adresu komputera w Pomocy.")
+                        if (adres.isBlank()) throw java.io.IOException("Agent Microsoft Copilot wymaga włączonego serwera warsztatu (wpisz adres w zakładce Pomoc).")
                         agent.opiszPrzezCopilota(adres, notatka, _stan.value.poprawki, zdjecie)
                     }
                     "muse" -> {
-                        if (adres.isBlank()) throw java.io.IOException("Muse wymaga adresu komputera w Pomocy.")
+                        if (adres.isBlank()) throw java.io.IOException("Agent Muse Code wymaga włączonego serwera warsztatu (wpisz adres w zakładce Pomoc).")
                         agent.opiszPrzezMuse(adres, notatka, _stan.value.poprawki, zdjecie)
+                    }
+                    "gemini" -> {
+                        if (klucz.isBlank()) throw java.io.IOException("Agent Google Gemini wymaga klucza API w zakładce Pomoc.")
+                        agent.opiszZdjecie(
+                            klucz, zdjecie, notatka,
+                            wybor.model.ifBlank { _stan.value.modelOpisu },
+                            _stan.value.poprawki,
+                        )
                     }
                     else -> {
                         if (klucz.isNotBlank()) {
-                            try {
-                                agent.opiszZdjecie(
-                                    klucz, zdjecie, notatka,
-                                    wybor.model.ifBlank { _stan.value.modelOpisu },
-                                    _stan.value.poprawki,
-                                )
-                            } catch (e: Exception) {
-                                if (silnikWybrany == "gemini" || adres.isBlank() || notatka.isBlank()) throw e
-                                dopiszCzynnosc(
-                                    co = "Gemini odmówił — przechodzę na Muse",
-                                    silnik = _stan.value.modelOpisu,
-                                    wynik = opisBledu(e),
-                                    udana = false,
-                                )
-                                _stan.update {
-                                    it.copy(komunikat = "Gemini nie odpowiada — piszę przez Muse na komputerze...")
-                                }
-                                agent.opiszPrzezMuse(adres, notatka, _stan.value.poprawki, zdjecie)
-                            }
+                            agent.opiszZdjecie(klucz, zdjecie, notatka, wybor.model.ifBlank { _stan.value.modelOpisu }, _stan.value.poprawki)
+                        } else if (adres.isNotBlank()) {
+                            agent.opiszPrzezMete(adres, notatka, _stan.value.poprawki, zdjecie)
                         } else {
-                            if (silnikWybrany == "gemini") {
-                                throw java.io.IOException("Brak klucza Gemini — wpisz go w zakładce Pomoc.")
-                            }
-                            agent.opiszPrzezMuse(adres, notatka, _stan.value.poprawki, zdjecie)
+                            throw java.io.IOException("Wpisz klucz Gemini lub adres warsztatu w Pomocy.")
                         }
                     }
                 }
@@ -949,10 +885,12 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 _stan.update { it.copy(propozycjaAgenta = szkic) }
                 dopiszCzynnosc(
                     co = "Opis ze zdjęcia",
-                    silnik = when (wybrany) {
+                    silnik = when (silnikWybrany) {
+                        "meta" -> "Meta AI"
                         "copilot" -> "Copilot"
                         "muse" -> "Muse"
-                        else -> if (klucz.isBlank()) "Muse" else _stan.value.modelOpisu
+                        "gemini" -> "Gemini"
+                        else -> "Agent"
                     },
                     wynik = szkic.nazwa.ifBlank { "gotowy" },
                 )

@@ -113,9 +113,9 @@ fun EkranKreatora(
     naWgrajZdjecie: (Int, Uri, String) -> Unit,
     /** Film albo animacja do ogloszenia: produkt, plik, podpis. */
     naWgrajPlik: (Int, Uri, String) -> Unit = { _, _, _ -> },
-    /** Caly ciag: zdjecie, co to jest, ksztalt, dopisek, wynik zdjecia, wynik animacji. */
-    naCiagAuto: (Uri, String, String, String, (Uri) -> Unit, (Uri) -> Unit) -> Unit =
-        { _, _, _, _, _, _ -> },
+    /** Caly ciag: zdjecie, co to jest, ksztalt, dopisek, silnik, wynik zdjecia, wynik animacji. */
+    naCiagAuto: (Uri, String, String, String, String, (Uri) -> Unit, (Uri) -> Unit) -> Unit =
+        { _, _, _, _, _, _, _ -> },
     naUsunZdjecie: (Int) -> Unit,
     /** Sciaga zdjecie produktu ze sklepu na telefon, zeby dalo sie na nim pracowac. */
     naPobierzZdjecieProduktu: (String, (Uri) -> Unit) -> Unit = { _, _ -> },
@@ -460,132 +460,128 @@ fun EkranKreatora(
         val opcje = when (zadanie) {
             "opis", "poprawa-opisu" -> listOf(
                 TrzyOpcje(
-                    "copilot", "Microsoft Copilot (GPT-4o)",
-                    "Świetny opis handlowy z przeglądarki przez GPT-4o.",
+                    "meta", "Agent Meta AI (Llama 3 Vision)",
+                    "Generowanie opisu rzemiosła i marketingu z Meta AI.",
                     true,
                 ),
                 TrzyOpcje(
-                    "meta", "Meta AI (Llama 3 Vision)",
-                    "Rozpoznanie przedmiotu i styl marketingowy z Meta AI.",
+                    "copilot", "Agent Microsoft Copilot (GPT-4o)",
+                    "Opis handlowy i wycena rynkowa z Microsoft Copilot.",
                     true,
                 ),
                 TrzyOpcje(
-                    "gemini", "Google Gemini (Inteligentny Agregator)",
-                    "Automatyczny dobór: Flash dla szybkości, Pro dla głębokiej redakcji rzemiosła.",
+                    "gemini", "Agent Google Gemini (3.6 Flash / Pro)",
+                    "Oficjalne modele Google: 3.6 Flash dla szybkości, Pro dla redakcji.",
                     true,
                 ),
                 TrzyOpcje(
-                    "muse", "Muse Code CLI (Lokalny PC)",
-                    "Lokalny model na komputerze bez opłat i limitów.",
+                    "muse", "Agent Muse Code (Lokalny PC CLI)",
+                    "Lokalny agent redakcyjny na Twoim komputerze bez opłat i limitów.",
                     true,
                 ),
-                TrzyOpcje("auto", "Automatycznie", "Wybierz najszybszy dostępny silnik", true),
             )
             "auto-ciag" -> listOf(
                 TrzyOpcje(
-                    "meta", "Ścieżka Meta AI",
-                    "Kadr studyjny + animacja obrotowa 360° przez Meta AI w przeglądarce.",
+                    "meta", "Agent Meta AI (Pełny ciąg)",
+                    "Kadr studyjny + animacja obrotowa 360° GIF przez Meta AI.",
                     true,
                 ),
                 TrzyOpcje(
-                    "flow", "Ścieżka Google Flow (Veo)",
-                    "Ujęcie Veo 3.1 + kadr przez Agenta Google Flow w przeglądarce.",
+                    "flow", "Agent Google Flow (Pełny ciąg)",
+                    "Kadr studyjny + ujęcie Veo 3.1 & Omni z dźwiękiem.",
                     true,
                 ),
                 TrzyOpcje(
-                    "forge", "Ścieżka Karta RTX 5070",
-                    "Wycięcie tła (rembg) + rendering studyjny na karcie graficznej.",
+                    "gemini", "Agent Google Gemini (Pełny ciąg)",
+                    "Wymiana tła Imagen 3.0 + animacja Veo w chmurze.",
                     true,
                 ),
                 TrzyOpcje(
-                    "gemini", "Ścieżka Google Gemini (Agregator)",
-                    "Wymiana tła przez Imagen + wideo Veo przez chmurę Google.",
+                    "forge", "Agent Karta RTX 5070 (Pełny ciąg)",
+                    "Wycięcie tła maską (rembg 1.3s) + rendering i animacja lokalnie.",
                     true,
                 ),
                 TrzyOpcje(
-                    "auto", "Pełny Agregator (Auto)",
-                    "Automatyczny dobór najlepszych silników do każdego etapu.",
+                    "copilot", "Agent Microsoft Copilot (Pełny ciąg)",
+                    "Kadr DALL-E 3 + animacja przez Copilota.",
                     true,
                 ),
             )
             "tlo" -> listOf(
                 TrzyOpcje(
-                    "meta", "Meta AI (Przeglądarka)",
-                    "Wymiana tła i stylizacja kadru (proporcje 16:9, 9:16, 1:1).",
+                    "meta", "Agent Meta AI (Przeglądarka)",
+                    "Wymiana tła i stylizacja kadru w Meta AI (16:9, 9:16, 1:1).",
                     true,
                 ),
                 TrzyOpcje(
-                    "flow", "Google Flow (Przeglądarka)",
+                    "flow", "Agent Google Flow (Przeglądarka)",
                     "Generowanie i stylizacja kadru przez Google Flow.",
                     true,
                 ),
                 TrzyOpcje(
-                    "copilot", "Microsoft Copilot (DALL-E 3)",
+                    "copilot", "Agent Microsoft Copilot (DALL-E 3)",
                     "Stylizacja tła i kadru przez Copilota w przeglądarce.",
                     true,
                 ),
                 TrzyOpcje(
-                    "forge", "Karta RTX 5070 (Rembg)",
-                    "Wycięcie tła maską i pastelowe tło studyjne na PC.",
+                    "forge", "Agent Karta RTX 5070 (Rembg)",
+                    "Wycięcie tła maską (1.3s) i pastelowe tło studyjne na PC.",
                     true,
                 ),
                 TrzyOpcje(
-                    "gemini", "Google Gemini (Inteligentny Agregator)",
-                    "Generowanie i stylizacja tła przez Imagen 3.0 / Gemini w chmurze.",
+                    "gemini", "Agent Google Gemini (Imagen 3)",
+                    "Generowanie i stylizacja tła przez Imagen 3.0 w chmurze.",
                     true,
                 ),
-                TrzyOpcje("auto", "Automatycznie", "Wybierz najszybszy dostępny silnik", true),
             )
             "upiekszanie" -> listOf(
                 TrzyOpcje(
-                    "meta", "Meta AI (Przeglądarka)",
+                    "meta", "Agent Meta AI (Przeglądarka)",
                     "Poprawa oświetlenia, ostrości i nastroju przez Meta AI.",
                     true,
                 ),
                 TrzyOpcje(
-                    "flow", "Google Flow (Przeglądarka)",
+                    "flow", "Agent Google Flow (Przeglądarka)",
                     "Poprawa jakości ujęcia przez Google Flow.",
                     true,
                 ),
                 TrzyOpcje(
-                    "copilot", "Microsoft Copilot (Przeglądarka)",
+                    "copilot", "Agent Microsoft Copilot (Przeglądarka)",
                     "Poprawa stylu i światła przez Copilota.",
                     true,
                 ),
                 TrzyOpcje(
-                    "forge", "Karta RTX 5070 (PC)",
+                    "forge", "Agent Karta RTX 5070 (PC)",
                     "Obróbka światła i kontrastu na lokalnej karcie graficznej.",
                     true,
                 ),
                 TrzyOpcje(
-                    "gemini", "Google Gemini (Inteligentny Agregator)",
+                    "gemini", "Agent Google Gemini (Imagen 3)",
                     "Poprawa detali i oświetlenia przez chmurę Google.",
                     true,
                 ),
-                TrzyOpcje("auto", "Automatycznie", "Wybierz najszybszy dostępny silnik", true),
             )
             else -> listOf(
                 TrzyOpcje(
-                    "meta", "Meta AI (Turntable 360°)",
-                    "Obrót wideo 360° w przeglądarce Meta AI (format 9:16 lub 16:9).",
+                    "meta", "Agent Meta AI (Turntable 360° GIF)",
+                    "Natywny obrót 360° GIF w przeglądarce Meta AI (format 9:16 lub 16:9).",
                     true,
                 ),
                 TrzyOpcje(
-                    "flow", "Google Flow (Veo 3.1 & Omni / Flow Agent)",
-                    "Generowanie wideo Veo 3.1 przez Agenta Google Flow.",
+                    "flow", "Agent Google Flow (Veo 3.1 & Omni)",
+                    "Generowanie wideo Veo 3.1 przez Agenta Google Flow (720p 8s).",
                     true,
                 ),
                 TrzyOpcje(
-                    "comfy", "Karta RTX 5070 (ComfyUI)",
+                    "gemini", "Agent Google Gemini (Veo Cloud)",
+                    "Generowanie wideo przez oficjalny model Google Veo.",
+                    true,
+                ),
+                TrzyOpcje(
+                    "comfy", "Agent Karta RTX 5070 (ComfyUI)",
                     "Lokalna animacja na karcie graficznej PC.",
                     true,
                 ),
-                TrzyOpcje(
-                    "gemini", "Google Gemini (Inteligentny Agregator / Veo)",
-                    "Generowanie wideo przez chmurę Google Veo / Gemini.",
-                    true,
-                ),
-                TrzyOpcje("auto", "Automatycznie", "Wybierz najszybszy dostępny silnik", true),
             )
         }
 
@@ -625,6 +621,7 @@ fun EkranKreatora(
                         notatka.ifBlank { nazwa },
                         proporcje,
                         dodatkowe,
+                        silnik,
                         { poprawione ->
                             // Kazdy krok oddaje kadr od razu, wiec widac postep,
                             // a nie tylko kolo na ekranie. Oryginal zapamietujemy

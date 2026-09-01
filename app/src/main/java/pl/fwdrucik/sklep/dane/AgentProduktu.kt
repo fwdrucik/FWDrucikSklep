@@ -359,6 +359,44 @@ class AgentProduktu(
         return json.decodeFromString(wylusknijJson(odp.odpowiedz))
     }
 
+    suspend fun opiszPrzezMete(
+        adres: String,
+        notatka: String,
+        poprawki: List<Poprawka> = emptyList(),
+        zdjecie: Uri? = null,
+    ): SzkicProduktu {
+        val obraz = zdjecie?.let { wczytajObrazDoWyslania(it) }
+        if (notatka.isBlank() && obraz == null) {
+            throw IOException("Napisz notatkę lub podaj słowa kluczowe dla Meta AI.")
+        }
+        val polecenie = buildString {
+            appendLine(instrukcja)
+            append(lekcje(poprawki))
+            appendLine()
+            appendLine("NOTATKA SPRZEDAWCY:\n$notatka\n")
+            appendLine("Napisz chwytliwy, rzemieślniczy opis produktu i oszacuj cenę.")
+            appendLine("Odpowiedz WYŁĄCZNIE obiektem JSON bez znaczników markdown:")
+            appendLine("""{"nazwa":"","opis_krotki":"","opis":"","kategoria":"","jednostka":"szt.","opis_zdjecia":"","cena":"","waga":"","czas_realizacji":"","do_uzupelnienia":[]}""")
+        }
+        val czystyAdres = adres.trim().trimEnd('/')
+        val odp = if (obraz == null) {
+            warsztat.meta("$czystyAdres/meta", polecenie)
+        } else {
+            warsztat.metaZeZdjeciem(
+                "$czystyAdres/meta-obraz",
+                okhttp3.MultipartBody.Part.createFormData(
+                    "plik", "kadr.jpg",
+                    obraz.toRequestBody("image/jpeg".toMediaType()),
+                ),
+                polecenie.toRequestBody("text/plain".toMediaType()),
+            )
+        }
+        if (!odp.ok || odp.odpowiedz.isBlank()) {
+            throw IOException(odp.blad.ifBlank { "Most do Meta AI nie odpowiedział. Czy komputer i przeglądarka są włączone?" })
+        }
+        return json.decodeFromString(wylusknijJson(odp.odpowiedz))
+    }
+
     /**
      * Poprawia opis, który już jest — bez zdjęcia i bez wymyślania faktów.
      *
@@ -398,6 +436,18 @@ class AgentProduktu(
             Czego brakuje, wypisz w do_uzupelnienia.
 
         """.trimIndent() + "\n" + zrodlo
+
+        if (silnik == "meta") {
+            if (adresWarsztatu.isBlank()) throw IOException("Brak adresu komputera w ustawieniach.")
+            val pelne = polecenie +
+                "\n\nOdpowiedz WYLACZNIE obiektem JSON, bez komentarza:\n" +
+                """{"nazwa":"","opis_krotki":"","opis":"","kategoria":"","jednostka":"szt.","opis_zdjecia":"","cena":"","waga":"","czas_realizacji":"","do_uzupelnienia":[]}"""
+            val odp = warsztat.meta("$adresWarsztatu/meta", pelne)
+            if (!odp.ok || odp.odpowiedz.isBlank()) {
+                throw IOException(odp.blad.ifBlank { "Most do Meta AI nie odpowiedział." })
+            }
+            return json.decodeFromString(wylusknijJson(odp.odpowiedz))
+        }
 
         if (silnik == "muse") {
             if (adresWarsztatu.isBlank()) throw IOException("Brak adresu komputera w ustawieniach.")
