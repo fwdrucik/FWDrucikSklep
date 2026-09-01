@@ -783,17 +783,19 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
             ) { etap -> _stan.update { it.copy(komunikat = "Krok 2 z 3 (światło): $etap") } }
 
             val kadrGotowy = when (poSwietle) {
-                is Wynik.Jest -> Uri.fromFile(poSwietle.dane)
+                is Wynik.Jest -> {
+                    pl.fwdrucik.sklep.narzedzia.GaleriaZapis.zapiszDoGalerii(
+                        getApplication<Application>(),
+                        poSwietle.dane,
+                        czyWideo = false,
+                    )
+                    Uri.fromFile(poSwietle.dane)
+                }
                 is Wynik.Blad -> {
-                    // Poprawka światła jest ulepszeniem, nie warunkiem. Kadr bez
-                    // tła już mamy i szkoda go wyrzucać przez jedno potknięcie —
-                    // idziemy dalej na tym, co jest.
                     dopiszCzynnosc(
                         "Ciąg auto — światło", silnikSwiatla,
                         poSwietle.komunikat.take(90), udana = false,
                     )
-                    // Cisza w tym miejscu byla mylaca: czlowiek widzial skok
-                    // z kroku 1 do 3 i mial prawo myslec, ze swiatlo poprawiono.
                     _stan.update {
                         it.copy(komunikat = "Światła nie poprawiłem (" +
                             poSwietle.komunikat.take(60) + ") — animuję kadr bez tła.")
@@ -821,10 +823,15 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
 
             when (poRuchu) {
                 is Wynik.Jest -> {
+                    pl.fwdrucik.sklep.narzedzia.GaleriaZapis.zapiszDoGalerii(
+                        getApplication<Application>(),
+                        poRuchu.dane,
+                        czyWideo = true,
+                    )
                     gotowaAnimacja(Uri.fromFile(poRuchu.dane))
                     dopiszCzynnosc("Ciąg auto — animacja", silnikRuchu, "gotowe", poRuchu.dane.absolutePath)
                     _stan.update {
-                        it.copy(komunikat = "Gotowe: tło, światło i animacja. Sprawdź i zaakceptuj.")
+                        it.copy(komunikat = "Gotowe: tło, światło i animacja. Wszystko zapisane w galerii.")
                     }
                 }
                 is Wynik.Blad -> {

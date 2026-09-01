@@ -23,10 +23,15 @@ import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PhotoFilter
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Card
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -56,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import pl.fwdrucik.sklep.BuildConfig
 import pl.fwdrucik.sklep.dane.KopiaRobocza
+import pl.fwdrucik.sklep.dane.Polecenia
 import pl.fwdrucik.sklep.dane.Produkt
 import pl.fwdrucik.sklep.dane.Statusy
 import pl.fwdrucik.sklep.dane.SzkicProduktu
@@ -840,29 +846,73 @@ fun EkranKreatora(
                 Podpowiedzi.notatkaDlaAgenta,
             )
 
-            // DWA PRZYCISKI, RESZTA W PYTANIACH.
-            Row(
-                Modifier.fillMaxWidth().padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            // Główny przycisk automatyzacji Antigravity
+            Button(
+                onClick = { pytanieOSilnik = "auto-ciag" },
+                enabled = lokalneZdjecie != null && !agentPracuje,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                ),
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
             ) {
-                Button(
+                if (agentPracuje) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("🤖 Antigravity pracuje...")
+                } else {
+                    Icon(Icons.Filled.AutoAwesome, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("🤖 Antigravity — Stwórz wszystko z kadru", style = MaterialTheme.typography.titleSmall)
+                }
+            }
+
+            // Pojedyncze akcje narzędziowe
+            Row(
+                Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
                     onClick = { pytanieOSilnik = "opis" },
                     enabled = lokalneZdjecie != null && !agentPracuje,
                     modifier = Modifier.weight(1f),
                 ) {
-                    if (agentPracuje) {
-                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Filled.AutoAwesome, contentDescription = null)
-                    }
-                    Text("  Opis")
+                    Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Opis")
                 }
-                Button(
+                OutlinedButton(
                     onClick = { pytanieOZadaniuZdjecia = true },
                     enabled = lokalneZdjecie != null && !agentPracuje,
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("Zdjęcie")
+                    Icon(Icons.Filled.PhotoFilter, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Tło / Kadr")
+                }
+                OutlinedButton(
+                    onClick = {
+                        val zdj = lokalneZdjecie ?: return@OutlinedButton
+                        naZlecWarsztatowi(
+                            when (silnikAnimacji) {
+                                "flow" -> "animacja-flow"
+                                "meta" -> "animacja-meta"
+                                else -> "animacja"
+                            },
+                            zdj,
+                            Polecenia.obrot(nazwa.ifBlank { notatka }),
+                            "9:16",
+                        ) { uri ->
+                            animacja = uri
+                            swiezaAnimacja = uri
+                        }
+                    },
+                    enabled = lokalneZdjecie != null && !agentPracuje,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Wideo")
                 }
             }
 
@@ -1298,19 +1348,24 @@ fun EkranKreatora(
             }
         }
 
-        // Przyciski zapisu ZOSTAJA poza sekcjami — muszą być pod ręką niezależnie
-        // od tego, co jest rozwinięte. Zwinięty zapis to zgubiona robota.
+        // ------------------------------------------------- przyciski na dole
         Row(
-            Modifier.fillMaxWidth().padding(top = 28.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            OutlinedButton(onClick = naWyjscie, modifier = Modifier.weight(1f)) {
-                Text("Wróć")
-            }
             OutlinedButton(
+                onClick = naWyjscie,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                modifier = Modifier.weight(0.7f),
+            ) {
+                Text("Wróć", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelMedium)
+            }
+            Button(
                 onClick = {
                     val nazwaAwaryjna = nazwa.trim().ifBlank {
-                        notatka.trim().take(40).ifBlank { "Wyrob bez nazwy" }
+                        notatka.trim().take(40).ifBlank { "Wyrób bez nazwy" }
                     }
                     val zebrany = p.copy(
                         nazwa = nazwaAwaryjna,
@@ -1335,11 +1390,12 @@ fun EkranKreatora(
                     )
                 },
                 enabled = !agentPracuje,
-                modifier = Modifier.weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                modifier = Modifier.weight(1.3f),
             ) {
-                Text("Opublikuj")
+                Text("Opublikuj", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelMedium)
             }
-            Button(
+            FilledTonalButton(
                 onClick = {
                     val zebrany = p.copy(
                         nazwa = nazwa.trim(),
@@ -1364,9 +1420,10 @@ fun EkranKreatora(
                     )
                 },
                 enabled = nazwa.isNotBlank() && cena.isNotBlank() && !agentPracuje,
-                modifier = Modifier.weight(1f),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                modifier = Modifier.weight(0.8f),
             ) {
-                Text("Zapisz")
+                Text("Zapisz", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelMedium)
             }
         }
     }
