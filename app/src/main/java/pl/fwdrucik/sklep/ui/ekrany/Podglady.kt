@@ -525,24 +525,20 @@ fun WyborSilnika(
                     }
                 }
 
-                // Model pokazujemy tylko przy Gemini: Muse i komputer nie maja
-                // czego wybierac, a pusta lista tylko myli.
-                if (silnik == "gemini" && modele.isNotEmpty()) {
-                    Text(
-                        "Model",
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
-                    androidx.compose.foundation.layout.FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                // Przy Gemini informujemy o inteligentnym doborze modelu w locie (Flash / Pro / Imagen / Veo)
+                if (silnik == "gemini") {
+                    androidx.compose.material3.Card(
+                        colors = androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                        ),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                     ) {
-                        modele.forEach { m ->
-                            androidx.compose.material3.FilterChip(
-                                selected = m == model,
-                                onClick = { model = m },
-                                label = { Text(m, maxLines = 1) },
-                            )
-                        }
+                        Text(
+                            "🤖 Agregator Gemini: model jest dobierany automatycznie w locie do zadania (Flash dla szybkości, Pro dla głębokiej redakcji, Imagen dla obrazu, Veo dla wideo).",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(8.dp),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
                     }
                 }
 

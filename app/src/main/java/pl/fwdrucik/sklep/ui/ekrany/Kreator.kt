@@ -466,8 +466,8 @@ fun EkranKreatora(
                     true,
                 ),
                 TrzyOpcje(
-                    "gemini", "Google Gemini (Chmura)",
-                    "Precyzyjne rozpoznanie detali i cech z kadru.",
+                    "gemini", "Google Gemini (Inteligentny Agregator)",
+                    "Automatyczny dobór: Flash dla szybkości, Pro dla głębokiej redakcji rzemiosła.",
                     true,
                 ),
                 TrzyOpcje(
@@ -485,12 +485,17 @@ fun EkranKreatora(
                 ),
                 TrzyOpcje(
                     "flow", "Ścieżka Google Flow (Veo)",
-                    "Ujęcie Veo 3.1 + kadr przez Google Flow w przeglądarce.",
+                    "Ujęcie Veo 3.1 + kadr przez Agenta Google Flow w przeglądarce.",
                     true,
                 ),
                 TrzyOpcje(
                     "forge", "Ścieżka Karta RTX 5070",
                     "Wycięcie tła (rembg) + rendering studyjny na karcie graficznej.",
+                    true,
+                ),
+                TrzyOpcje(
+                    "gemini", "Ścieżka Google Gemini (Agregator)",
+                    "Wymiana tła przez Imagen + wideo Veo przez chmurę Google.",
                     true,
                 ),
                 TrzyOpcje(
@@ -521,8 +526,8 @@ fun EkranKreatora(
                     true,
                 ),
                 TrzyOpcje(
-                    "gemini", "Google Gemini Imagen",
-                    "Generowanie tła przez API Gemini w chmurze.",
+                    "gemini", "Google Gemini (Inteligentny Agregator)",
+                    "Generowanie i stylizacja tła przez Imagen 3.0 / Gemini w chmurze.",
                     true,
                 ),
                 TrzyOpcje("auto", "Automatycznie", "Wybierz najszybszy dostępny silnik", true),
@@ -549,8 +554,8 @@ fun EkranKreatora(
                     true,
                 ),
                 TrzyOpcje(
-                    "gemini", "Google Gemini (Chmura)",
-                    "Poprawa detali przez chmurę Google.",
+                    "gemini", "Google Gemini (Inteligentny Agregator)",
+                    "Poprawa detali i oświetlenia przez chmurę Google.",
                     true,
                 ),
                 TrzyOpcje("auto", "Automatycznie", "Wybierz najszybszy dostępny silnik", true),
@@ -562,13 +567,18 @@ fun EkranKreatora(
                     true,
                 ),
                 TrzyOpcje(
-                    "flow", "Google Flow (Veo 3.1)",
+                    "flow", "Google Flow (Veo 3.1 & Omni / Flow Agent)",
                     "Generowanie wideo Veo 3.1 przez Agenta Google Flow.",
                     true,
                 ),
                 TrzyOpcje(
                     "comfy", "Karta RTX 5070 (ComfyUI)",
                     "Lokalna animacja na karcie graficznej PC.",
+                    true,
+                ),
+                TrzyOpcje(
+                    "gemini", "Google Gemini (Inteligentny Agregator / Veo)",
+                    "Generowanie wideo przez chmurę Google Veo / Gemini.",
                     true,
                 ),
                 TrzyOpcje("auto", "Automatycznie", "Wybierz najszybszy dostępny silnik", true),
