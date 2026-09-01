@@ -453,108 +453,123 @@ fun EkranKreatora(
     pytanieOSilnik?.let { zadanie ->
         val opcje = when (zadanie) {
             "opis", "poprawa-opisu" -> listOf(
-                TrzyOpcje("auto", "Automatycznie", "Wybierz za mnie to, co teraz zyje", true),
-                TrzyOpcje(
-                    "gemini", "Gemini (chmura)",
-                    if (zadanie == "opis") "Widzi zdjecie — najlepszy do opisu z kadru"
-                    else "Szybki, ale liczy sie do limitu",
-                    maKluczGemini,
-                ),
-                TrzyOpcje(
-                    "muse", "Muse na komputerze",
-                    "Bez limitu i za darmo. Widzi zdjęcie — komputer podaje mu kadr.",
-                    museDostepny,
-                ),
                 TrzyOpcje(
                     "copilot", "Microsoft Copilot (GPT-4o)",
-                    "Opisy i cechy wyrobu za darmo przez konto Microsoft.",
-                    copilotDziala,
+                    "Świetny opis handlowy z przeglądarki przez GPT-4o.",
+                    true,
                 ),
+                TrzyOpcje(
+                    "meta", "Meta AI (Llama 3 Vision)",
+                    "Rozpoznanie przedmiotu i styl marketingowy z Meta AI.",
+                    true,
+                ),
+                TrzyOpcje(
+                    "gemini", "Google Gemini (Chmura)",
+                    "Precyzyjne rozpoznanie detali i cech z kadru.",
+                    true,
+                ),
+                TrzyOpcje(
+                    "muse", "Muse Code CLI (Lokalny PC)",
+                    "Lokalny model na komputerze bez opłat i limitów.",
+                    true,
+                ),
+                TrzyOpcje("auto", "Automatycznie", "Wybierz najszybszy dostępny silnik", true),
             )
-            // Caly ciag prowadzi agregator, wiec nie ma tu czego wybierac.
-            // Pokazujemy jedna pozycje zamiast chowac liste: czlowiek widzi
-            // wtedy, ze decyzja zostala podjeta, a nie ze o nia zapomniano.
             "auto-ciag" -> listOf(
                 TrzyOpcje(
-                    "auto", "Agregator wybiera",
-                    "Do każdego z trzech kroków bierze to, co akurat żyje " +
-                        "i jest najszybsze.",
+                    "meta", "Ścieżka Meta AI",
+                    "Kadr studyjny + animacja obrotowa 360° przez Meta AI w przeglądarce.",
+                    true,
+                ),
+                TrzyOpcje(
+                    "flow", "Ścieżka Google Flow (Veo)",
+                    "Ujęcie Veo 3.1 + kadr przez Google Flow w przeglądarce.",
+                    true,
+                ),
+                TrzyOpcje(
+                    "forge", "Ścieżka Karta RTX 5070",
+                    "Wycięcie tła (rembg) + rendering studyjny na karcie graficznej.",
+                    true,
+                ),
+                TrzyOpcje(
+                    "auto", "Pełny Agregator (Auto)",
+                    "Automatyczny dobór najlepszych silników do każdego etapu.",
                     true,
                 ),
             )
-            // Wycinanie tla: Forge pierwszy, bo robi to MASKA, a nie model —
-            // tlo znika zawsze, a wyrob zostaje nietkniety. Reszta dorysowuje
-            // tlo od nowa, co bywa ladniejsze, ale bywa tez innym przedmiotem.
             "tlo" -> listOf(
-                TrzyOpcje("auto", "Automatycznie", "Wybierz za mnie to, co teraz żyje", true),
                 TrzyOpcje(
-                    "forge", "Komputer w warsztacie",
-                    "Wycina tło maską i stawia wyrób na pastelu. Pewne i za darmo.",
-                    forgeDziala,
+                    "meta", "Meta AI (Przeglądarka)",
+                    "Wymiana tła i stylizacja kadru (proporcje 16:9, 9:16, 1:1).",
+                    true,
                 ),
                 TrzyOpcje(
-                    "flow", "Flow (Nano Banana)",
-                    "Najszybszy — kadr w kilkanaście sekund, zero punktów. " +
-                        "Oddaje zawsze kwadrat.",
-                    flowDziala,
+                    "flow", "Google Flow (Przeglądarka)",
+                    "Generowanie i stylizacja kadru przez Google Flow.",
+                    true,
                 ),
                 TrzyOpcje(
-                    "meta", "Meta AI",
-                    "Około minuty, za to jedyny, który da zadany kształt: " +
-                        "16:9 na stronę, 9:16 pod rolkę.",
-                    metaDziala,
+                    "copilot", "Microsoft Copilot (DALL-E 3)",
+                    "Stylizacja tła i kadru przez Copilota w przeglądarce.",
+                    true,
                 ),
                 TrzyOpcje(
-                    "copilot", "Copilot (DALL-E 3 / Designer)",
-                    "Stylizacja tła i kadru za darmo.",
-                    copilotDziala,
+                    "forge", "Karta RTX 5070 (Rembg)",
+                    "Wycięcie tła maską i pastelowe tło studyjne na PC.",
+                    true,
                 ),
                 TrzyOpcje(
-                    "gemini", "Gemini (chmura)",
-                    "Szybkie, ale limit obrazów kończy się pierwszy.",
-                    maKluczGemini,
+                    "gemini", "Google Gemini Imagen",
+                    "Generowanie tła przez API Gemini w chmurze.",
+                    true,
                 ),
+                TrzyOpcje("auto", "Automatycznie", "Wybierz najszybszy dostępny silnik", true),
             )
-            // Upiekszanie: tu chodzi o swiatlo i ostrosc, wiec Forge idzie
-            // z niskim denoise, a modele chmurowe dostaja polecenie wprost
-            // zakazujace zmiany wyrobu.
             "upiekszanie" -> listOf(
-                TrzyOpcje("auto", "Automatycznie", "Wybierz za mnie to, co teraz żyje", true),
                 TrzyOpcje(
-                    "gemini", "Gemini (chmura)",
-                    "Najlepiej trzyma się oryginału. Limit obrazów kończy się pierwszy.",
-                    maKluczGemini,
+                    "meta", "Meta AI (Przeglądarka)",
+                    "Poprawa oświetlenia, ostrości i nastroju przez Meta AI.",
+                    true,
                 ),
                 TrzyOpcje(
-                    "forge", "Komputer w warsztacie",
-                    "Poprawia światło na własnej karcie, bez limitu i za darmo.",
-                    forgeDziala,
+                    "flow", "Google Flow (Przeglądarka)",
+                    "Poprawa jakości ujęcia przez Google Flow.",
+                    true,
                 ),
                 TrzyOpcje(
-                    "flow", "Flow (Nano Banana)",
-                    "Kilkanaście sekund, zero punktów. Oddaje kwadrat.",
-                    flowDziala,
+                    "copilot", "Microsoft Copilot (Przeglądarka)",
+                    "Poprawa stylu i światła przez Copilota.",
+                    true,
                 ),
                 TrzyOpcje(
-                    "meta", "Meta AI",
-                    "Około minuty, kształt kadru do wyboru.",
-                    metaDziala,
+                    "forge", "Karta RTX 5070 (PC)",
+                    "Obróbka światła i kontrastu na lokalnej karcie graficznej.",
+                    true,
                 ),
                 TrzyOpcje(
-                    "copilot", "Microsoft Copilot (Designer)",
-                    "Poprawa stylu i światła DALL-E 3.",
-                    copilotDziala,
+                    "gemini", "Google Gemini (Chmura)",
+                    "Poprawa detali przez chmurę Google.",
+                    true,
                 ),
+                TrzyOpcje("auto", "Automatycznie", "Wybierz najszybszy dostępny silnik", true),
             )
             else -> listOf(
-                TrzyOpcje("auto", "Automatycznie", "Wybierz za mnie to, co teraz zyje", true),
-                TrzyOpcje("comfy", "Karta w warsztacie", "5 sekund, 0 zl, bez dzwieku", comfyDziala),
-                TrzyOpcje("flow", "Veo przez Flow", "8 sekund z dzwiekiem, 20 punktow z abonamentu", flowDziala),
                 TrzyOpcje(
-                    "meta", "Meta AI",
-                    "5 sekund ze zdjecia, 0 zl, ksztalt do wyboru. Bez dzwieku.",
-                    metaDziala,
+                    "meta", "Meta AI (Turntable 360°)",
+                    "Obrót wideo 360° w przeglądarce Meta AI (format 9:16 lub 16:9).",
+                    true,
                 ),
+                TrzyOpcje(
+                    "flow", "Google Flow (Veo 3.1)",
+                    "Generowanie wideo Veo 3.1 przez Agenta Google Flow.",
+                    true,
+                ),
+                TrzyOpcje(
+                    "comfy", "Karta RTX 5070 (ComfyUI)",
+                    "Lokalna animacja na karcie graficznej PC.",
+                    true,
+                ),
+                TrzyOpcje("auto", "Automatycznie", "Wybierz najszybszy dostępny silnik", true),
             )
         }
 
@@ -923,19 +938,8 @@ fun EkranKreatora(
                 }
                 OutlinedButton(
                     onClick = {
-                        val zdj = lokalneZdjecie ?: return@OutlinedButton
-                        naZlecWarsztatowi(
-                            when (silnikAnimacji) {
-                                "flow" -> "animacja-flow"
-                                "meta" -> "animacja-meta"
-                                else -> "animacja"
-                            },
-                            zdj,
-                            Polecenia.obrot(nazwa.ifBlank { notatka }),
-                            "9:16",
-                        ) { uri ->
-                            animacja = uri
-                            swiezaAnimacja = uri
+                        if (lokalneZdjecie != null) {
+                            pytanieOSilnik = "animacja"
                         }
                     },
                     enabled = lokalneZdjecie != null && !agentPracuje,
