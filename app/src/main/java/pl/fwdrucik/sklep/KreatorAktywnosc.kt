@@ -1,4 +1,4 @@
-﻿package pl.fwdrucik.sklep
+package pl.fwdrucik.sklep
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -72,50 +72,57 @@ private fun KreatorZawartosc(
                 .fillMaxSize()
                 .padding(odstepy)
         ) {
-            if (stan.ladowanie) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
+            val istniejacy = if (idProduktu > 0) stan.produkty.firstOrNull { it.id == idProduktu } else null
+            if (idProduktu > 0 && istniejacy == null && (stan.ladowanie || stan.produkty.isEmpty())) {
+                Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                    androidx.compose.material3.CircularProgressIndicator()
+                }
+            } else {
+                if (stan.ladowanie) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
 
-            EkranKreatora(
-                istniejacy = if (idProduktu > 0) model.znajdz(idProduktu) else null,
-                agentPracuje = stan.agentPracuje,
-                maKluczGemini = stan.kluczGemini.isNotBlank(),
-                kopia = stan.kopieRobocze[if (idProduktu > 0) idProduktu else 0],
-                naZapiszKopie = model::zapiszKopie,
-                naOdrzucKopie = model::skasujKopie,
-                naOpiszZeZdjecia = model::opiszZeZdjecia,
-                naPoprawZdjecie = model::poprawZdjecie,
-                naPoprawOpis = model::poprawOpis,
-                modeleTekstowe = stan.modeleTekstowe,
-                modeleObrazowe = stan.modeleObrazowe,
-                modelOpisu = stan.modelOpisu,
-                modelObrazu = stan.modelObrazu,
-                museDostepny = stan.museWarsztatu == "dostepne",
-                forgeDziala = stan.stanForge == "dziala",
-                comfyDziala = stan.stanComfy == "dziala",
-                flowDziala = stan.stanFlow == "dziala",
-                metaDziala = stan.stanMeta == "dziala",
-                copilotDziala = stan.stanCopilot == "dziala",
-                silnikAnimacji = model.silnikDo("animacja"),
-                czynnosci = stan.czynnosci,
-                naZapisz = { produkt, cena, promo, zdjecie, dodatkowe, animacja, alt ->
-                    model.zapiszZeZdjeciami(produkt, cena, promo, zdjecie, dodatkowe, animacja, alt) { _ ->
+                EkranKreatora(
+                    istniejacy = istniejacy,
+                    agentPracuje = stan.agentPracuje,
+                    maKluczGemini = stan.kluczGemini.isNotBlank(),
+                    kopia = stan.kopieRobocze[if (idProduktu > 0) idProduktu else 0],
+                    naZapiszKopie = model::zapiszKopie,
+                    naOdrzucKopie = model::skasujKopie,
+                    naOpiszZeZdjecia = model::opiszZeZdjecia,
+                    naPoprawZdjecie = model::poprawZdjecie,
+                    naPoprawOpis = model::poprawOpis,
+                    modeleTekstowe = stan.modeleTekstowe,
+                    modeleObrazowe = stan.modeleObrazowe,
+                    modelOpisu = stan.modelOpisu,
+                    modelObrazu = stan.modelObrazu,
+                    museDostepny = stan.museWarsztatu == "dostepne",
+                    forgeDziala = stan.stanForge == "dziala",
+                    comfyDziala = stan.stanComfy == "dziala",
+                    flowDziala = stan.stanFlow == "dziala",
+                    metaDziala = stan.stanMeta == "dziala",
+                    copilotDziala = stan.stanCopilot == "dziala",
+                    silnikAnimacji = model.silnikDo("animacja"),
+                    czynnosci = stan.czynnosci,
+                    naZapisz = { produkt, cena, promo, zdjecie, dodatkowe, animacja, alt ->
+                        model.zapiszZeZdjeciami(produkt, cena, promo, zdjecie, dodatkowe, animacja, alt) { _ ->
+                            model.zamknijKreator()
+                            naZamknij()
+                        }
+                    },
+                    warsztatGotowy = stan.swiatloWarsztatu in listOf("zielony", "zolty", "czerwony"),
+                    naZlecWarsztatowi = model::zlecWarsztatowi,
+                    naWgrajPlik = model::wgrajPlikDoOgloszenia,
+                    naCiagAuto = model::ciagAutomatyczny,
+                    naWgrajZdjecie = model::wgrajZdjecie,
+                    naUsunZdjecie = model::usunZdjecie,
+                    naPobierzZdjecieProduktu = model::pobierzZdjecieProduktu,
+                    naWyjscie = {
                         model.zamknijKreator()
                         naZamknij()
-                    }
-                },
-                warsztatGotowy = stan.swiatloWarsztatu in listOf("zielony", "zolty", "czerwony"),
-                naZlecWarsztatowi = model::zlecWarsztatowi,
-                naWgrajPlik = model::wgrajPlikDoOgloszenia,
-                naCiagAuto = model::ciagAutomatyczny,
-                naWgrajZdjecie = model::wgrajZdjecie,
-                naUsunZdjecie = model::usunZdjecie,
-                naPobierzZdjecieProduktu = model::pobierzZdjecieProduktu,
-                naWyjscie = {
-                    model.zamknijKreator()
-                    naZamknij()
-                },
-            )
+                    },
+                )
+            }
         }
     }
 }
