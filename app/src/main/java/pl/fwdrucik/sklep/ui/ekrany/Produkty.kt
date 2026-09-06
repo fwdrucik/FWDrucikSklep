@@ -38,6 +38,11 @@ import pl.fwdrucik.sklep.dane.Produkt
 import pl.fwdrucik.sklep.dane.Statusy
 import pl.fwdrucik.sklep.dane.groszeNaZlote
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.OutlinedTextField
+
 @Composable
 fun EkranProduktow(
     produkty: List<Produkt>,
@@ -47,9 +52,11 @@ fun EkranProduktow(
     kopie: List<KopiaRobocza> = emptyList(),
     naOtworzKopie: (Int) -> Unit = {},
     naUsunKopie: (Int) -> Unit = {},
+    naImportujAllegro: ((String) -> Unit)? = null,
 ) {
     var filtr by remember { mutableStateOf("wszystkie") }
     var doUsuniecia by remember { mutableStateOf<Produkt?>(null) }
+    var pokazImportAllegro by remember { mutableStateOf(false) }
 
     val widoczne = when (filtr) {
         "wszystkie" -> produkty
@@ -59,17 +66,74 @@ fun EkranProduktow(
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            listOf("wszystkie" to "Wszystkie") .plus(
-                Statusy.produktu.map { it to Statusy.opisProduktu(it) }
-            ).forEach { (klucz, etykieta) ->
-                FilterChip(
-                    selected = filtr == klucz,
-                    onClick = { filtr = klucz },
-                    label = { Text(etykieta, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            Row(
+                modifier = Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf("wszystkie" to "Wszystkie").plus(
+                    Statusy.produktu.map { it to Statusy.opisProduktu(it) }
+                ).forEach { (klucz, etykieta) ->
+                    FilterChip(
+                        selected = filtr == klucz,
+                        onClick = { filtr = klucz },
+                        label = { Text(etykieta, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    )
+                }
+            }
+            if (naImportujAllegro != null) {
+                Spacer(Modifier.size(8.dp))
+                AssistChip(
+                    onClick = { pokazImportAllegro = true },
+                    label = { Text("⚡ Import Allegro", style = MaterialTheme.typography.labelSmall) },
                 )
             }
+        }
+
+        if (pokazImportAllegro) {
+            var urlAllegro by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { pokazImportAllegro = false },
+                title = { Text("Importuj aukcję z Allegro") },
+                text = {
+                    Column {
+                        Text(
+                            "Wklej link do wystawionej aukcji Allegro. Sklep pobierze ustandaryzowany opis, tytuł (max 75 zn.), cenę oraz zdjęcia i opublikuje produkt na fwdrucik.pl.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.size(12.dp))
+                        OutlinedTextField(
+                            value = urlAllegro,
+                            onValueChange = { urlAllegro = it },
+                            label = { Text("Adres URL aukcji Allegro") },
+                            placeholder = { Text("https://allegro.pl/oferta/...") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (urlAllegro.isNotBlank()) {
+                                naImportujAllegro?.invoke(urlAllegro.trim())
+                                pokazImportAllegro = false
+                            }
+                        },
+                        enabled = urlAllegro.isNotBlank() && urlAllegro.startsWith("http")
+                    ) {
+                        Text("Pobierz i opublikuj")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pokazImportAllegro = false }) {
+                        Text("Anuluj")
+                    }
+                }
+            )
         }
 
         if (widoczne.isEmpty() && kopie.isEmpty()) {
@@ -194,11 +258,18 @@ private fun KartaProduktu(
                             )
                         },
                     )
-                    AssistChip(
-                        onClick = {},
-                        enabled = false,
-                        label = { Text(Statusy.opisProduktu(produkt.status), maxLines = 1) },
-                    )
+                    if (!produkt.allegroUrl.isNullOrBlank()) {
+                        AssistChip(
+                            onClick = {},
+                            label = { Text("🟠 Allegro", maxLines = 1) },
+                        )
+                    } else {
+                        AssistChip(
+                            onClick = {},
+                            enabled = false,
+                            label = { Text(Statusy.opisProduktu(produkt.status), maxLines = 1) },
+                        )
+                    }
                 }
             }
 

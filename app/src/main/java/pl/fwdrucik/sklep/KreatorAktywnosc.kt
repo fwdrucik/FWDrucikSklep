@@ -117,6 +117,18 @@ private fun KreatorZawartosc(
                     naWgrajZdjecie = model::wgrajZdjecie,
                     naUsunZdjecie = model::usunZdjecie,
                     naPobierzZdjecieProduktu = model::pobierzZdjecieProduktu,
+                    naImportujAllegro = { url ->
+                        model.importujZAukcjiAllegro(url) { _ ->
+                            model.zamknijKreator()
+                            naZamknij()
+                        }
+                    },
+                    naSynchronizujAllegro = { url, aId, nzw, cen, kat, op, opK ->
+                        model.synchronizujAukcjeAllegro(url, aId, nzw, cen, kat, op, opK) { _ ->
+                            model.zamknijKreator()
+                            naZamknij()
+                        }
+                    },
                     naWyjscie = {
                         model.zamknijKreator()
                         naZamknij()

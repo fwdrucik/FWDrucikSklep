@@ -32,3 +32,4 @@ captures/
 *.iml
 .DS_Store
 Thumbs.db
+memory/

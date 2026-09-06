@@ -101,6 +101,83 @@ object MostChmury {
     }
 
     /**
+     * Replikacja katalogu produktow (w tym danych Allegro) do Firestore.
+     * Umozliwia wspoldzielenie bazy ze zdalnymi aplikacjami i panelami.
+     */
+    suspend fun przeniesProdukty(
+        context: Context,
+        cfg: TrojkaFirebase,
+        produkty: List<Produkt>,
+    ): Int = withContext(Dispatchers.IO) {
+        if (produkty.isEmpty()) return@withContext 0
+        val app = aplikacja(context, cfg) ?: return@withContext 0
+        val auth = FirebaseAuth.getInstance(app)
+        runCatching {
+            if (auth.currentUser == null) czekaj(auth.signInAnonymously())
+            val baza = FirebaseFirestore.getInstance(app)
+            var ile = 0
+            produkty.forEach { p ->
+                val docId = if (p.id > 0) p.id.toString() else p.slug.ifBlank { p.nazwa }
+                val dokument = baza.collection("produkty").document(docId)
+                val dane = mapOf(
+                    "id" to p.id,
+                    "nazwa" to p.nazwa,
+                    "kategoria" to p.kategoria,
+                    "cena_gr" to p.cenaGr,
+                    "cena_promo_gr" to (p.cenaPromoGr ?: 0),
+                    "status" to p.status,
+                    "stan" to (p.stan ?: 0),
+                    "opis_krotki" to p.opisKrotki,
+                    "opis" to p.opis,
+                    "allegro_id" to (p.allegroId ?: ""),
+                    "allegro_url" to (p.allegroUrl ?: ""),
+                    "allegro_cena_gr" to (p.allegroCenaGr ?: 0),
+                    "allegro_status" to p.allegroStatus,
+                    "allegro_kategoria" to (p.allegroKategoria ?: ""),
+                    "zaktualizowano" to System.currentTimeMillis(),
+                )
+                czekaj(dokument.set(dane, com.google.firebase.firestore.SetOptions.merge()))
+                ile++
+            }
+            ile
+        }.getOrDefault(0)
+    }
+
+    suspend fun przeniesProdukt(
+        context: Context,
+        cfg: TrojkaFirebase,
+        p: Produkt,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val app = aplikacja(context, cfg) ?: return@withContext false
+        val auth = FirebaseAuth.getInstance(app)
+        runCatching {
+            if (auth.currentUser == null) czekaj(auth.signInAnonymously())
+            val baza = FirebaseFirestore.getInstance(app)
+            val docId = if (p.id > 0) p.id.toString() else p.slug.ifBlank { System.currentTimeMillis().toString() }
+            val dokument = baza.collection("produkty").document(docId)
+            val dane = mapOf(
+                "id" to p.id,
+                "nazwa" to p.nazwa,
+                "kategoria" to p.kategoria,
+                "cena_gr" to p.cenaGr,
+                "cena_promo_gr" to (p.cenaPromoGr ?: 0),
+                "status" to p.status,
+                "stan" to (p.stan ?: 0),
+                "opis_krotki" to p.opisKrotki,
+                "opis" to p.opis,
+                "allegro_id" to (p.allegroId ?: ""),
+                "allegro_url" to (p.allegroUrl ?: ""),
+                "allegro_cena_gr" to (p.allegroCenaGr ?: 0),
+                "allegro_status" to p.allegroStatus,
+                "allegro_kategoria" to (p.allegroKategoria ?: ""),
+                "zaktualizowano" to System.currentTimeMillis(),
+            )
+            czekaj(dokument.set(dane, com.google.firebase.firestore.SetOptions.merge()))
+            true
+        }.getOrDefault(false)
+    }
+
+    /**
      * Sprawdzenie połączenia z chmurą — dla kontrolki w Pomocy.
      *
      * Zwraca `null`, gdy wszystko gra, albo zdanie z przyczyną. Czyta jeden

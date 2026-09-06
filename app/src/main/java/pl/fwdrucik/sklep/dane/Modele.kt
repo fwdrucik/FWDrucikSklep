@@ -44,6 +44,13 @@ data class Produkt(
     val pozycja: Int = 100,
     val url: String = "",
     val obrazy: List<Obraz> = emptyList(),
+    val pliki: List<PlikProduktu> = emptyList(),
+    @SerialName("allegro_id") val allegroId: String? = null,
+    @SerialName("allegro_url") val allegroUrl: String? = null,
+    @SerialName("allegro_kategoria") val allegroKategoria: String? = null,
+    @SerialName("allegro_cena_gr") val allegroCenaGr: Int? = null,
+    @SerialName("allegro_status") val allegroStatus: String = "brak",
+    @SerialName("allegro_parametry") val allegroParametry: String? = null,
 ) {
     val cenaObowiazujaca: Int get() = cenaPromoGr ?: cenaGr
     val naZamowienie: Boolean get() = stan == null
@@ -65,9 +72,14 @@ data class Zamowienie(
     val status: String = "nowe",
     val nick: String = "",
     @SerialName("suma_gr") val sumaGr: Int = 0,
+    @SerialName("towar_gr") val towarGr: Int = 0,
+    @SerialName("dostawa_gr") val dostawaGr: Int = 0,
     val utworzone: String = "",
-    val dostawa: String = "",
-    val platnosc: String = "",
+    @SerialName("sposob_dostawy") val sposobDostawy: String = "",
+    @SerialName("sposob_platnosci") val sposobPlatnosci: String = "",
+    val uwagi: String = "",
+    val email: String = "",
+    val gosc: Int = 0,
     /**
      * Numer listu przewozowego. Pusty, dopoki paczka nie wyszla.
      *
@@ -77,7 +89,11 @@ data class Zamowienie(
     val przesylka: String = "",
     val pozycje: List<PozycjaZamowienia> = emptyList(),
     val adres: Map<String, JsonElement> = emptyMap(),
-)
+) {
+    // Zachowanie zgodnosci z dotychczasowym UI
+    val dostawa: String get() = sposobDostawy
+    val platnosc: String get() = sposobPlatnosci
+}
 
 // ------------------------------------------------------------- odpowiedzi
 
@@ -180,6 +196,10 @@ data class KopiaRobocza(
     val dodatkoweKadry: List<String> = emptyList(),
     val animacja: String = "",
     val sekcjaOtwarta: Int = 1,
+    val allegroUrl: String = "",
+    val allegroCena: String = "",
+    val allegroId: String = "",
+    val allegroStatus: String = "brak",
     /** Kiedy zapisana — millisekundy, do pokazania godziny na banerze. */
     val zapisano: Long = 0,
 ) {

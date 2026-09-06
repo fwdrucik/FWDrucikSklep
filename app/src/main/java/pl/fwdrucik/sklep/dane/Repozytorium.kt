@@ -75,8 +75,18 @@ class Repozytorium(
 
     suspend fun produkty(): Wynik<List<Produkt>> = wywolaj { api.produkty().produkty }
 
-    suspend fun zapisz(p: Produkt, cenaZl: String, cenaPromoZl: String): Wynik<OdpowiedzZapisu> =
+    suspend fun zapisz(
+        p: Produkt,
+        cenaZl: String,
+        cenaPromoZl: String,
+        allegroCenaZl: String = "",
+    ): Wynik<OdpowiedzZapisu> =
         wywolaj {
+            val allegroCenaWysylka = if (allegroCenaZl.isNotBlank()) {
+                allegroCenaZl
+            } else {
+                p.allegroCenaGr?.let { groszeNaZlote(it).replace(" zł", "").trim() }.orEmpty()
+            }
             api.zapiszProdukt(
                 id = p.id,
                 nazwa = p.nazwa,
@@ -92,6 +102,12 @@ class Repozytorium(
                 czasRealizacji = p.czasRealizacji,
                 status = p.status,
                 pozycja = p.pozycja.toString(),
+                allegroUrl = p.allegroUrl.orEmpty(),
+                allegroCena = allegroCenaWysylka,
+                allegroId = p.allegroId.orEmpty(),
+                allegroStatus = p.allegroStatus,
+                allegroKategoria = p.allegroKategoria.orEmpty(),
+                allegroParametry = p.allegroParametry.orEmpty(),
             )
         }
 
@@ -101,6 +117,38 @@ class Repozytorium(
     suspend fun usun(id: Int): Wynik<Unit> = wywolaj { api.usunProdukt(id); Unit }
 
     suspend fun usunObraz(id: Int): Wynik<Unit> = wywolaj { api.usunObraz(id); Unit }
+
+    suspend fun usunPlik(id: Int): Wynik<Unit> = wywolaj { api.usunPlik(id); Unit }
+
+    suspend fun synchronizujAukcjeAllegro(
+        allegroUrl: String,
+        allegroId: String,
+        nazwa: String,
+        cena: String,
+        kategoria: String = "inne",
+        opis: String = "",
+        opisKrotki: String = "",
+        stan: String = "1",
+        jednostka: String = "szt.",
+        czasRealizacji: String = "1-2 dni robocze",
+    ): Wynik<OdpowiedzZapisu> = wywolaj {
+        api.synchronizujAukcjeAllegro(
+            allegroUrl = allegroUrl,
+            allegroId = allegroId,
+            nazwa = nazwa,
+            cena = cena,
+            kategoria = kategoria,
+            opis = opis,
+            opisKrotki = opisKrotki,
+            stan = stan,
+            jednostka = jednostka,
+            czasRealizacji = czasRealizacji,
+        )
+    }
+
+    suspend fun importujAukcjeAllegro(url: String): Wynik<OdpowiedzZapisu> = wywolaj {
+        api.importujAukcjeAllegro(url = url)
+    }
 
     suspend fun statusZamowienia(
         id: Int,

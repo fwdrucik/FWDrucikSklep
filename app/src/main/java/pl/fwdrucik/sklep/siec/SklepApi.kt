@@ -61,6 +61,33 @@ interface SklepApi {
         @Field("czas_realizacji") czasRealizacji: String,
         @Field("status") status: String,
         @Field("pozycja") pozycja: String,
+        @Field("allegro_url") allegroUrl: String = "",
+        @Field("allegro_cena") allegroCena: String = "",
+        @Field("allegro_id") allegroId: String = "",
+        @Field("allegro_status") allegroStatus: String = "brak",
+        @Field("allegro_kategoria") allegroKategoria: String = "",
+        @Field("allegro_parametry") allegroParametry: String = "",
+    ): OdpowiedzZapisu
+
+    @FormUrlEncoded
+    @POST("api/sklep.php?akcja=allegro-synchronizuj-aukcje")
+    suspend fun synchronizujAukcjeAllegro(
+        @Field("allegro_url") allegroUrl: String,
+        @Field("allegro_id") allegroId: String,
+        @Field("nazwa") nazwa: String,
+        @Field("cena") cena: String,
+        @Field("kategoria") kategoria: String = "inne",
+        @Field("opis") opis: String = "",
+        @Field("opis_krotki") opisKrotki: String = "",
+        @Field("stan") stan: String = "1",
+        @Field("jednostka") jednostka: String = "szt.",
+        @Field("czas_realizacji") czasRealizacji: String = "1-2 dni robocze",
+    ): OdpowiedzZapisu
+
+    @FormUrlEncoded
+    @POST("api/sklep.php?akcja=allegro-import-z-linku")
+    suspend fun importujAukcjeAllegro(
+        @Field("url") url: String,
     ): OdpowiedzZapisu
 
     @FormUrlEncoded
@@ -101,6 +128,10 @@ interface SklepApi {
     @FormUrlEncoded
     @POST("api/sklep.php?akcja=obraz-usun")
     suspend fun usunObraz(@Field("id") id: Int): OdpowiedzOgolna
+
+    @FormUrlEncoded
+    @POST("api/sklep.php?akcja=plik-usun")
+    suspend fun usunPlik(@Field("id") id: Int): OdpowiedzOgolna
 
     @GET("api/sklep.php?akcja=admin-zamowienia")
     suspend fun zamowienia(): OdpowiedzZamowien

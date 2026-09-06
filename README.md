@@ -1,178 +1,169 @@
-# DRUCIK Sklep — aplikacja do prowadzenia sklepu z telefonu
+﻿# 🛒 F.W. DRUCIK Sklep — Mobilne Centrum Zarządzania & Asystent AI
 
-Osobna aplikacja na Androida do obsługi sklepu `fwdrucik.pl` bez siadania do
-komputera: dodawanie i edycja produktów, zdjęcia prosto z telefonu, stany
-magazynowe, zamówienia i powiadomienie, gdy ktoś kupi.
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.1.0-blue.svg?logo=kotlin)](https://kotlinlang.org)
+[![Android](https://img.shields.io/badge/Android-8.0%2B%20(API%2026%2B)-green.svg?logo=android)](https://developer.android.com)
+[![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose%20%2F%20Material%203-4285F4.svg?logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
+[![AI Agent](https://img.shields.io/badge/AI%20Engine-Gemini%20%7C%20Meta%20AI%20%7C%20Copilot%20%7C%20RTX%205070-orange.svg)](#-hub-wielomodelowy-ai-w-kreatorze)
+[![Visibility](https://img.shields.io/badge/Repository-Public-brightgreen.svg)](https://github.com/fwdrucik/FWDrucikSklep)
 
-Aplikacja **nie ma własnej bazy danych**. Wszystko siedzi na serwerze i jedzie
-przez `api/sklep.php` — ten sam, z którego korzysta strona. Dzięki temu nie ma
-czegoś takiego jak „rozjechany katalog w telefonie i na stronie”.
+> **Dedykowana aplikacja na Androida do kompleksowej obsługi sklepu internetowego [fwdrucik.pl](https://fwdrucik.pl) bezpośrednio ze stołu warsztatowego — z wbudowanym wielomodelowym agentem AI.**
 
-## Co robi
+---
 
-| Zakładka | Do czego |
+## 🔗 Dokumentacja Projektu na GitHubie
+
+- 📖 **Główna dokumentacja (README):** [https://github.com/fwdrucik/FWDrucikSklep#readme](https://github.com/fwdrucik/FWDrucikSklep#readme)
+- 🏗️ **Audyt Architektury & Kontrakty API (PHP ↔ Kotlin):** [docs/AUDYT-ARCHITEKTURY.md](docs/AUDYT-ARCHITEKTURY.md)
+- 🤖 **Standardy Technologiczne i Reguły Agentów AI:** [AGENTS.md](AGENTS.md)
+- 🛡️ **Zasady Bezpieczeństwa, Sesji i Izolacji Klientów:** [CLAUDE.md](CLAUDE.md)
+- 🌐 **Sklep produkcyjny online:** [https://fwdrucik.pl](https://fwdrucik.pl)
+
+---
+
+## 📸 Zrzuty Ekranu z Aplikacji
+
+<p align="center">
+  <img src="docs/screenshots/01_lista_produktow.png" width="31%" alt="Lista produktów i nawigacja" />
+  <img src="docs/screenshots/02_karta_produktu_robocza.png" width="31%" alt="Karta produktu i wersje robocze" />
+  <img src="docs/screenshots/06_ekran_logowania.png" width="31%" alt="Bezpieczne logowanie administratora" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/03_kreator_ai_agent.png" width="31%" alt="Kreator z Agentem AI" />
+  <img src="docs/screenshots/04_wybor_silnika_ai.png" width="31%" alt="Wielomodelowy wybór silnika tła i stylizacji" />
+  <img src="docs/screenshots/05_animacja_wideo.png" width="31%" alt="Gotowa animacja wideo wyrobu" />
+</p>
+
+---
+
+## 💡 Główne Funkcjonalności
+
+Aplikacja rozwiązuje kluczowy problem rzemieślnika i twórcy wyrobów: **dodawanie i edycję produktów bez siadania do komputera**. Wyrób powstaje na warsztacie, kładziesz go na stole, robisz zdjęcie telefonem, a wbudowany agent AI przygotowuje kompletny opis, kadr i publikację w sklepie.
+
+| Moduł | Zastosowanie i możliwości |
 |---|---|
-| Produkty | Lista wszystkiego razem ze szkicami. Publikacja i ukrywanie jednym dotknięciem, edycja, usuwanie. |
-| Magazyn | Same stany. Plus, minus, wpisanie liczby. Na górze widać, czego brakuje i co się kończy. |
-| Zamówienia | Kto, co, za ile, pod jaki adres. Zmiana statusu od „nowe” do „zakończone”. |
-| Pomoc | Instrukcja: jak wystawić produkt, jakie zdjęcia robić, co znaczy każde pole. |
+| **🏷️ Produkty** | Błyskawiczny przegląd całego asortymentu wraz ze szkicami. Publikowanie, wycofywanie ze sprzedaży (ukrywanie), edycja cen i usuwanie jednym dotknięciem. |
+| **📦 Magazyn** | Szybka korekta stanów magazynowych (+, -, wpisanie ilości). Wyróżnienie braków magazynowych oraz stanów krytycznych na górze listy. |
+| **📑 Zamówienia** | Pełny podgląd zamówień od klientów: zamawiający, adres wysyłki, pozycje, wybrane płatności i dostawa. Zmiana statusów realizacji (od *nowe* do *zakończone*). |
+| **✨ Kreator AI** | Autorski asystent wprowadzania produktów ze zdjęcia (patrz niżej). |
+| **🔔 Powiadomienia w tle** | `WorkManager` cyklicznie sprawdza nowe zamówienia i powiadamia dźwiękiem/wibracją o zakupie. |
+| **ℹ️ Pomoc & Podpowiedzi** | Kontekstowa baza wiedzy przy każdym polu kreatora (podpowiedzi, przykłady, wymogi prawne i konsumenckie). |
 
-Kreator produktu ma podpowiedź przy **każdym** polu — pod znakiem zapytania po
-prawej stronie. Podpowiedź mówi, co wpisać, daje przykład i tłumaczy, po co to
-pole jest. Te same treści zebrane razem są w zakładce Pomoc.
+---
 
-## Agent Gemini w kreatorze
+## 🤖 Hub Wielomodelowy AI w Kreatorze
 
-Kreator zaczyna się od zdjęcia, bo tak wygląda praca w warsztacie: wyrób leży
-na stole, robisz zdjęcie, opis powstaje z tego, co widać.
+Kreator produktów nie jest zwykłym formularzem — został zaprojektowany wokół pracy warsztatowej:
 
-1. **Zdjęcie** — z aparatu albo galerii (Photo Picker, bez proszenia o dostęp
-   do całej galerii).
-2. **Notatka** — dwa słowa: „fioletowy brelok”, „deska dębowa z żywicą”.
-3. **Opisz zdjęciem** — Gemini widzi zdjęcie, czyta notatkę i zwraca nazwę,
-   krótki opis, pełny opis, kategorię, jednostkę i opis alternatywny zdjęcia.
-4. **Popraw zdjęcie** — czyste tło, wyrównane światło, kadr na środku.
+1. **Zdjęcie prosto ze stołu** — pobierane przez aparat lub systemowy `Photo Picker` (aplikacja nie żąda uprawnień do całej pamięci urządzenia).
+2. **Szybka notatka głosowa lub tekstowa** — dwa słowa rzucone w biegu (np. *"świecznik kwiat lotosu żywica dąb"*).
+3. **Analiza wizualna i redakcja opisu** — model analizuje fizyczne cechy wyrobu i zwraca ustrukturyzowany JSON z nazwą, chwytliwym opisem krótkim, szczegółowym opisem technicznym, kategorią, jednostką miary i opisem alternatywnym (ALT).
+4. **Poprawa tła, kadru i światła** — możliwość wyboru silnika obróbki graficznej:
+   - **Google Gemini Imagen** — czyste generowanie studyjnego tła w chmurze,
+   - **Meta AI** — stylizacja kadru i wymiana tła (16:9, 9:16, 1:1),
+   - **Google Flow** — zaawansowana generacja kadrów,
+   - **Microsoft Copilot (DALL-E 3)** — kreatywna stylizacja otoczenia wyrobu,
+   - **Lokalna karta NVIDIA RTX 5070 (Rembg)** — bezchmurne, superszybkie wycięcie tła na serwerze warsztatowym PC,
+   - **Tryb automatyczny** — dobór najszybszego aktualnie dostępnego silnika.
+5. **Animacje wideo & GIF** — generowanie animowanych prezentacji obrotowych wyrobu do sklepu i social media (MP4 60FPS / GIF).
 
-### Dwie rzeczy wbudowane celowo
+### 🛡️ Zasady Etyki i Prawdy Produktowej AI
 
-**Agent nie zgaduje faktów.** Ma zakaz wymyślania gatunku drewna, wymiarów,
-rodzaju stali i technologii, jeśli nie widać ich jednoznacznie. Czego nie da
-się ustalić ze zdjęcia, wypisuje w osobnej ramce „tego nie widać na zdjęciu —
-uzupełnij sam”. Sklep sprzedaje rzeczy fizyczne; zgadnięty materiał w opisie
-to gotowa reklamacja.
+- **Agent nie zmyśla faktów:** Ma bezwzględny zakaz zgadywania gatunku drewna, wymiarów, stopu stali czy technologii, jeśli nie widać ich jednoznacznie na zdjęciu. Czego nie da się potwierdzić wizualnie, trafia do ramki: *"Tego nie widać na zdjęciu — uzupełnij sam"*. Rzetelność opisu chroni przed reklamacjami.
+- **Wyrób pozostaje autentyczny:** Silniki modyfikują tło, wyrównują oświetlenie i kadrują, nie ingerując w fizyczny kształt, strukturę i kolorystykę sprzedawanego rękodzieła.
+- **Priorytet pracy ręcznej:** Agent uzupełnia wyłącznie puste pola — nigdy nie nadpisuje wartości wpisanych ręcznie przez administratora.
 
-**Poprawianie zdjęcia nie zmienia wyrobu.** Model ma zakaz ruszania kształtu,
-koloru, faktury i liczby elementów — wolno mu poprawić tło, światło i kadr.
-Zdjęcie produktowe pokazuje rzecz, którą klient dostanie do ręki.
+---
 
-Agent uzupełnia tylko puste pola — tego, co wpiszesz ręcznie, nie nadpisuje.
+## 🏗️ Architektura & Bezpieczeństwo
 
-### Klucz API
-
-Wpisuje się raz w zakładce **Pomoc**. Zostaje w `DataStore` na telefonie:
-nie ma go w kodzie, w repozytorium ani w kopii zapasowej. Klucz w repozytorium
-to klucz spalony — wystarczy raz wypchnąć projekt na GitHuba.
-
-Gemini leci **osobnym klientem HTTP**, bez ciasteczek. Klient sklepowy nosi
-token sesji administratora fwdrucik.pl i wysłanie go pod adres Google byłoby
-wyciekiem danych logowania.
-
-Bez klucza kreator działa normalnie — opis piszesz sam.
-
-Modele: `gemini-2.5-flash` do opisu (z `responseSchema`, więc odpowiedź jest
-strukturą, a nie tekstem do wróżenia), `gemini-2.5-flash-image` do zdjęcia.
-Zdjęcie jest skalowane do 1536 px dłuższego boku przed wysłaniem.
-
-### Animacja produktowa — czego brakuje
-
-**Nie jest zrobiona i nie udaję, że jest.** Flow (Google Labs) nie ma
-publicznego API — to aplikacja w przeglądarce. Animację z API robi się modelem
-**Veo** przez Gemini API, a to wymaga:
-
-- płatnego poziomu dostępu (rozliczenia włączone w Google Cloud),
-- obsługi operacji długotrwałej: zlecenie zwraca `operation`, wynik odbiera się
-  odpytywaniem co kilkanaście sekund,
-- limitu długości i rozdzielczości ustalonego pod koszt jednej generacji.
-
-Wymaganie do zapamiętania przy wdrażaniu: **na animacjach nie umieszczamy
-żadnych napisów poza logo F.W. DRUCIK.**
-
-Kiedy będzie dostęp do API, dopisanie tego to jeden plik obok `AgentProduktu.kt`.
-
-## Czego potrzeba
-
-- Konto **administratora** na fwdrucik.pl (zwykłe konto klienta aplikacja
-  odrzuci przy logowaniu — i tak odbiłoby się o `fw_wymagaj_admina()`).
-- Android 8.0 (API 26) albo nowszy.
-- Internet. Bez niego nie da się nic zmienić.
-
-## Budowanie
-
-Na tym komputerze narzędzia leżą poza `PATH`, więc trzeba wskazać JDK ręcznie:
-
-```bash
-cd /c/Users/Computer/FWDrucikSklep && JAVA_HOME="/c/Program Files/Android/Android Studio/jbr" ./gradlew :app:assembleDebug
+```
+Aplikacja Android (Kotlin / Compose)
+      │
+      ├─── [1] OkHttpClient Sklepowy (CookieJar + X-Fw-Csrf) ──► api/sklep.php (fwdrucik.pl)
+      │
+      ├─── [2] OkHttpClient Gemini (Czysty, brak cookies)   ──► Google Generative AI API
+      │
+      └─── [3] OkHttpClient Warsztatowy (Timeout 3s)         ──► Serwer Warsztatowy PC (RTX 5070 / Rembg)
 ```
 
-Gotowy plik: `app/build/outputs/apk/debug/app-debug.apk`.
+1. **Zero własnej bazy po stronie telefonu:**
+   Aplikacja nie posiada lokalnej bazy Room ani SQLite dla asortymentu — wszystkie operacje realizowane są w czasie rzeczywistym przez `api/sklep.php`. Dzięki temu wyeliminowano problem rozbieżności stanów magazynowych pomiędzy telefonem a stroną www.
+2. **Ścisła izolacja klientów HTTP:**
+   - Klient sklepowy przesyła bezpieczne ciasteczko sesyjne administratora oraz tokeny CSRF.
+   - Klient Gemini wykonuje zapytania bezpośrednio do API Google bez przesyłania jakichkolwiek tokenów sesyjnych sklepu.
+   - Klient warsztatowy łączy się w sieci lokalnej z PC wyposażonym w RTX 5070.
+3. **Ochrona kluczy i sesji:**
+   - Klucz Gemini API przechowywany jest w szyfrowanym `DataStore` na urządzeniu — nie występuje w kodzie źródłowym, commitach ani kopiach chmurowych.
+   - Ciasteczko sesji administratora jest jawnie wykluczone z systemowej kopii zapasowej Androida (`reguly_kopii.xml`).
 
-Wgranie na podłączony telefon:
+---
+
+## ⚖️ Prawne Aspekty Magazynu & Zwrotów
+
+W aplikacji zaimplementowano regułę zgodną z art. 38 pkt 3 ustawy o prawach konsumenta:
+- **Puste pole stanu magazynowego** oznacza produkt wykonywany na indywidualne zamówienie. Sklep automatycznie informuje klienta o braku możliwości zwrotu w 14 dni oraz prawidłowo deklaruje ten stan w danych strukturalnych dla Google Merchant.
+- **Wpisanie konkretnej liczby sztuk** oznacza wyrób gotowy z magazynu, podlegający standardowemu prawu do zwrotu w ciągu 14 dni.
+
+---
+
+## 🛠️ Wymagania i Kompilacja
+
+### Wymagania systemowe
+- Android 8.0 (API 26) lub nowszy
+- Konto administratora na `fwdrucik.pl`
+- Aktywne połączenie internetowe
+
+### Kompilacja ze źródeł
+Projekt korzysta z Gradle Wrapper i JDK 21 / Android SDK 34:
 
 ```bash
-/c/Users/Computer/android-build/android-sdk/platform-tools/adb.exe install -r "C:/Users/Computer/FWDrucikSklep/app/build/outputs/apk/debug/app-debug.apk"
+# Budowanie wersji Debug APK
+./gradlew :app:assembleDebug
+
+# Gotowy plik instalacyjny:
+# app/build/outputs/apk/debug/app-debug.apk
+
+# Instalacja przez ADB na telefonie:
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### Wersje
+---
 
-`compileSdk 34`, AGP 8.7.3, Kotlin 2.1.0 — dokładnie to, co jest zainstalowane
-na tym komputerze (w `android-sdk/platforms` leży wyłącznie `android-34`).
-Podniesienie do nowszego SDK wymaga najpierw pobrania platformy przez
-`sdkmanager`, potem zmiany dwóch liczb w `app/build.gradle.kts`.
-
-### Adres serwera
-
-Siedzi w `app/build.gradle.kts` jako `ADRES_API`. Do testów na innym serwerze
-zmienia się tam jedną linię, a nie w kodzie.
-
-## Powiadomienia o zamówieniach
-
-`ObserwatorZamowien` (WorkManager) sprawdza sklep co 15 minut, także gdy
-aplikacja jest zamknięta. Krócej się nie da — Android nie uruchamia pracy
-cyklicznej częściej niż raz na kwadrans.
-
-Zapamiętywany jest **największy widziany numer zamówienia**, a nie ich liczba.
-Liczba potrafi zmaleć po usunięciu zamówienia i wtedy kolejne nowe nie
-podniosłoby jej ponad zapamiętany stan — powiadomienie by nie przyszło.
-
-Pierwsze uruchomienie po instalacji tylko zapisuje stan, bez powiadamiania.
-Inaczej na powitanie przyszłaby informacja o wszystkich zamówieniach sprzed
-instalacji.
-
-**Gdy powiadomienia nie przychodzą:** w ustawieniach telefonu sprawdź zgodę na
-powiadomienia i czy aplikacja nie została objęta oszczędzaniem baterii. Na
-telefonach Xiaomi, Huawei i Samsunga trzeba to zwykle ustawić ręcznie.
-
-## Bezpieczeństwo
-
-Ciasteczko sesji administratora jest wyłączone z kopii zapasowej i z
-przenoszenia na nowy telefon (`res/xml/reguly_kopii.xml`). Po zmianie telefonu
-logujesz się raz ręcznie. To celowe — token administratora sklepu nie ma prawa
-wyjechać z urządzenia w kopii w chmurze.
-
-## Uwaga o zwrotach
-
-Puste pole **stanu magazynowego** znaczy „wykonywane na zamówienie”. To nie jest
-kosmetyka: taki wyrób nie podlega zwrotowi w 14 dni (art. 38 pkt 3 ustawy o
-prawach konsumenta), sklep sam napisze to klientowi na stronie produktu i
-zadeklaruje odpowiednio w danych dla Google. Wpisanie tam liczby zmienia zasady
-zwrotu na standardowe 14 dni. Kreator ostrzega o tym w momencie, w którym
-zostawiasz pole puste.
-
-## Zanim klienci cokolwiek zobaczą
-
-Katalog jest publiczny dopiero po ustawieniu `sklep_otwarty` w konfiguracji
-serwera. Do tego czasu `/sklep/` pokazuje stronę o przebudowie, a Ty możesz
-spokojnie wprowadzać produkty przez aplikację. Szczegóły: `api/PLATNOSCI.md`,
-punkt 6.
-
-## Struktura
+## 🏛️ Struktura Kodu Źródłowego
 
 ```
 app/src/main/java/pl/fwdrucik/sklep/
-  SklepAplikacja.kt      — zależności, kanał powiadomień, planowanie pracy w tle
-  GlownaAktywnosc.kt     — zakładki i przełączanie ekranów
-  dane/Modele.kt         — odpowiedniki tabel z api/_sklep.php
-  dane/Repozytorium.kt   — wywołania API i tłumaczenie błędów na polski
-  dane/AgentProduktu.kt  — opis produktu ze zdjęcia i poprawianie zdjęcia
-  dane/Ustawienia.kt     — klucz Gemini w DataStore
-  siec/GeminiApi.kt      — Gemini: generateContent, schemat odpowiedzi
-  siec/SklepApi.kt       — punkty api/sklep.php i api/auth.php
-  siec/Sesja.kt          — ciasteczko sesji i nagłówek CSRF
-  pomoc/Podpowiedzi.kt   — treści podpowiedzi kreatora
-  praca/ObserwatorZamowien.kt — sprawdzanie zamówień w tle
-  ui/                    — ekrany
+├── SklepAplikacja.kt           # Start aplikacji, kanał powiadomień, planowanie WorkManager
+├── GlownaAktywnosc.kt          # Nawigacja i główne zakładki panelu
+├── KreatorAktywnosc.kt         # Niezależna aktywność kreatora z obsługą stanu roboczego
+├── dane/
+│   ├── Modele.kt               # Klasy danych (kontrakt 1:1 z tabelami api/_sklep.php)
+│   ├── Repozytorium.kt         # Warstwa danych, obsługa API, tłumaczenie błędów
+│   ├── AgentProduktu.kt        # Koordynator analizy AI ze zdjęcia i promptowania
+│   ├── MostChmury.kt           # Most komunikacji z silnikami generatywnymi i mediami
+│   └── Ustawienia.kt           # Bezpieczny magazyn DataStore (klucze API)
+├── siec/
+│   ├── SklepApi.kt             # Punkty końcowe REST Retrofit dla backendu fwdrucik.pl
+│   ├── GeminiApi.kt            # Klient Gemini API z restrykcyjnym JSON Schema
+│   └── Sesja.kt                # CookieJar i wstrzykiwanie nagłówka X-Fw-Csrf
+├── pomoc/
+│   └── Podpowiedzi.kt          # Wyczerpujące instrukcje i podpowiedzi do każdego pola
+├── praca/
+│   └── ObserwatorZamowien.kt   # WorkManager badający nowe zamówienia w tle
+└── ui/
+    ├── ModelSklepu.kt          # Główny ViewModel stanu UI
+    └── ekrany/
+        ├── Produkty.kt         # Ekran katalogu i zarządzania produktami
+        ├── Magazyn.kt          # Ekran stanów magazynowych
+        ├── Zamowienia.kt       # Ekran listy i detali zamówień
+        ├── Kreator.kt          # Ekran kreatora produktów z podglądem AI
+        ├── Pomoc.kt            # Ekran pomocy i konfiguracji klucza API
+        └── Logowanie.kt        # Ekran uwierzytelniania
 ```
 
-Bez Hilta i bez Room świadomie: jeden moduł, jedno repozytorium, dane i tak
-mieszkają na serwerze. Dołożenie ich wydłużyłoby kompilację i dorzuciło drugą
-tabelę zgodności wersji, nie usuwając ani jednej linii kodu.
+---
+
+<p align="center">
+  <b>F.W. DRUCIK</b> • Rękodzieło, Spawanie Artystyczne, Żywica i Druk 3D • <a href="https://fwdrucik.pl">fwdrucik.pl</a>
+</p>

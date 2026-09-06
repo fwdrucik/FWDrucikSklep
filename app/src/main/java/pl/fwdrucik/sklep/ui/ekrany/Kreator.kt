@@ -71,7 +71,9 @@ import pl.fwdrucik.sklep.dane.Polecenia
 import pl.fwdrucik.sklep.dane.Produkt
 import pl.fwdrucik.sklep.dane.Statusy
 import pl.fwdrucik.sklep.dane.SzkicProduktu
+import pl.fwdrucik.sklep.dane.zloteNaGrosze
 import pl.fwdrucik.sklep.pomoc.Aparat
+import pl.fwdrucik.sklep.pomoc.Podpowiedz
 import pl.fwdrucik.sklep.pomoc.Podpowiedzi
 import pl.fwdrucik.sklep.ui.groszeNaPole
 
@@ -123,6 +125,8 @@ fun EkranKreatora(
     kopia: KopiaRobocza? = null,
     naZapiszKopie: (KopiaRobocza) -> Unit = {},
     naOdrzucKopie: (Int) -> Unit = {},
+    naImportujAllegro: ((String) -> Unit)? = null,
+    naSynchronizujAllegro: ((String, String, String, String, String, String, String) -> Unit)? = null,
 ) {
     val p = istniejacy ?: Produkt()
 
@@ -168,6 +172,18 @@ fun EkranKreatora(
     var opisZdjecia by rememberSaveable(p.id) {
         mutableStateOf(kopia?.opisZdjecia.orEmpty())
     }
+    var allegroUrl by rememberSaveable(p.id) {
+        mutableStateOf(p.allegroUrl ?: kopia?.allegroUrl.orEmpty())
+    }
+    var allegroCena by rememberSaveable(p.id) {
+        mutableStateOf(p.allegroCenaGr?.let(::groszeNaPole) ?: kopia?.allegroCena.orEmpty())
+    }
+    var allegroId by rememberSaveable(p.id) {
+        mutableStateOf(p.allegroId ?: kopia?.allegroId.orEmpty())
+    }
+    var allegroStatus by rememberSaveable(p.id) {
+        mutableStateOf(if (p.allegroStatus.isNotBlank() && p.allegroStatus != "brak") p.allegroStatus else kopia?.allegroStatus?.ifBlank { "brak" } ?: "brak")
+    }
 
     var lokalneZdjecie by remember(p.id) {
         mutableStateOf<Uri?>(
@@ -200,7 +216,7 @@ fun EkranKreatora(
     var zdjecieOryginalne by remember(p.id) { mutableStateOf<Uri?>(null) }
     var opisPrzedPoprawka by remember(p.id) { mutableStateOf<Triple<String, String, String>?>(null) }
     var pokazOgloszenie by remember(p.id) { mutableStateOf(false) }
-    var otwarta by rememberSaveable { mutableIntStateOf(kopia?.sekcjaOtwarta?.takeIf { it in 1..4 } ?: 1) }
+    var otwarta by rememberSaveable { mutableIntStateOf(kopia?.sekcjaOtwarta?.takeIf { it in 1..5 } ?: 1) }
 
     // Swiezo policzony kadr i film — czekaja na decyzje czlowieka.
     //
@@ -306,6 +322,10 @@ fun EkranKreatora(
             if (animacja == null && kopia.animacja.isNotBlank() && java.io.File(kopia.animacja).exists()) {
                 animacja = Uri.fromFile(java.io.File(kopia.animacja))
             }
+            if (allegroUrl.isBlank() && kopia.allegroUrl.isNotBlank()) allegroUrl = kopia.allegroUrl
+            if (allegroCena.isBlank() && kopia.allegroCena.isNotBlank()) allegroCena = kopia.allegroCena
+            if (allegroId.isBlank() && kopia.allegroId.isNotBlank()) allegroId = kopia.allegroId
+            if (allegroStatus == "brak" && kopia.allegroStatus.isNotBlank() && kopia.allegroStatus != "brak") allegroStatus = kopia.allegroStatus
         }
     }
 
@@ -320,6 +340,10 @@ fun EkranKreatora(
         dodatkoweKadry = dodatkoweKadry.mapNotNull { it.path ?: it.toString() },
         animacja = animacja?.path ?: animacja?.toString().orEmpty(),
         sekcjaOtwarta = otwarta,
+        allegroUrl = allegroUrl,
+        allegroCena = allegroCena,
+        allegroId = allegroId,
+        allegroStatus = allegroStatus,
     )
     LaunchedEffect(biezaca) { naZapiszKopie(biezaca) }
 
@@ -1133,6 +1157,27 @@ fun EkranKreatora(
         if (otwarta == 2) {
 
         PoleZPodpowiedzia(nazwa, { nazwa = it }, Podpowiedzi.nazwa)
+        val limitAllegro = 75
+        val dlugoscNazwy = nazwa.length
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (dlugoscNazwy > limitAllegro) "⚠️ Przekroczono limit Allegro (max $limitAllegro znaków)" else "Limit tytułu Allegro: $dlugoscNazwy / $limitAllegro",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (dlugoscNazwy > limitAllegro) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (dlugoscNazwy > limitAllegro) {
+                TextButton(
+                    onClick = { nazwa = nazwa.take(limitAllegro).trim() },
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                ) {
+                    Text("Przytnij do 75", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
         PoleZPodpowiedzia(kategoria, { kategoria = it.lowercase().trim() }, Podpowiedzi.kategoria)
         PoleZPodpowiedzia(opisKrotki, { opisKrotki = it }, Podpowiedzi.opisKrotki, wiersze = 3)
         PoleZPodpowiedzia(opis, { opis = it }, Podpowiedzi.opis, wiersze = 6)
@@ -1194,14 +1239,151 @@ fun EkranKreatora(
 
         }
 
+        // ------------------------------------------------- krok 4: allegro
         NaglowekSekcji(
             numer = 4,
-            tytul = "Podgląd, status i galeria",
-            podpis = Statusy.nazwaProduktu(status),
+            tytul = "Integracja z Allegro",
+            podpis = when {
+                allegroUrl.isNotBlank() -> "Aukcja podpięta"
+                allegroId.isNotBlank() -> "ID: $allegroId"
+                allegroStatus != "brak" -> "Status: $allegroStatus"
+                else -> "brak aukcji"
+            },
             otwarta = otwarta == 4,
             naKlik = { otwarta = if (otwarta == 4) 0 else 4 },
         )
         if (otwarta == 4) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+                ),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+            ) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(
+                        "🟠 Przekierowanie do Allegro",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.size(4.dp))
+                    Text(
+                        "Wpisanie linku do aukcji sprawi, że klienci na stronie fwdrucik.pl po kliknięciu „Kup” zostaną bezpośrednio przeniesieni do Twojej oferty z obsługą Allegro Smart i Allegro Protect.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            PoleZPodpowiedzia(allegroUrl, { allegroUrl = it }, Podpowiedzi.allegroUrl)
+
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.weight(1.2f)) {
+                    PoleZPodpowiedzia(allegroCena, { allegroCena = it }, Podpowiedzi.allegroCena, liczbowe = true)
+                }
+                OutlinedButton(
+                    onClick = {
+                        val c = zloteNaGrosze(cena)
+                        if (c != null && c > 0) {
+                            val zProwizja = (c * 1.12).toInt()
+                            allegroCena = groszeNaPole(zProwizja)
+                        }
+                    },
+                    enabled = cena.isNotBlank(),
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    Text("+12% prowizji")
+                }
+            }
+
+            PoleZPodpowiedzia(
+                allegroId,
+                { allegroId = it },
+                Podpowiedz(
+                    pole = "ID oferty Allegro",
+                    krotko = "Numer oferty z Allegro (np. 15423891023).",
+                    przyklad = "15423891023",
+                    dlaczego = "Pozwala agentowi i serwerowi MCP synchronizować stany i ceny bezpośrednio przez API Allegro."
+                ),
+                liczbowe = true
+            )
+
+            Text(
+                "Status oferty na Allegro",
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                listOf("brak" to "Brak", "szkic" to "Szkic", "aktywna" to "Aktywna", "zakonczona" to "Koniec").forEach { (klucz, etykieta) ->
+                    FilterChip(
+                        selected = allegroStatus == klucz,
+                        onClick = { allegroStatus = klucz },
+                        label = { Text(etykieta, style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
+            }
+
+            if (allegroUrl.isNotBlank() && allegroUrl.startsWith("http")) {
+                Button(
+                    onClick = {
+                        naImportujAllegro?.invoke(allegroUrl.trim())
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary
+                    ),
+                    enabled = !agentPracuje
+                ) {
+                    Text("⚡ Pobierz ustandaryzowane dane z aukcji i opublikuj")
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        naSynchronizujAllegro?.invoke(
+                            allegroUrl.trim(),
+                            allegroId.trim(),
+                            nazwa.trim(),
+                            allegroCena.ifBlank { cena }.trim(),
+                            kategoria,
+                            opis.trim(),
+                            opisKrotki.trim()
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    enabled = nazwa.isNotBlank() && !agentPracuje
+                ) {
+                    Text("🚀 Wyślij format aukcji na fwdrucik.pl")
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        runCatching {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(allegroUrl.trim()))
+                            context.startActivity(intent)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                ) {
+                    Text("Otwórz aukcję na Allegro ↗")
+                }
+            }
+        }
+
+        // ------------------------------------------------- krok 5: podgląd
+        NaglowekSekcji(
+            numer = 5,
+            tytul = "Podgląd, status i galeria",
+            podpis = Statusy.nazwaProduktu(status),
+            otwarta = otwarta == 5,
+            naKlik = { otwarta = if (otwarta == 5) 0 else 5 },
+        )
+        if (otwarta == 5) {
 
         OutlinedButton(
             onClick = { pokazOgloszenie = !pokazOgloszenie },
@@ -1475,6 +1657,10 @@ fun EkranKreatora(
                         czasRealizacji = czas.trim(),
                         status = "opublikowany",
                         pozycja = pozycja.trim().toIntOrNull() ?: 100,
+                        allegroUrl = allegroUrl.trim().ifBlank { null },
+                        allegroCenaGr = zloteNaGrosze(allegroCena),
+                        allegroId = allegroId.trim().ifBlank { null },
+                        allegroStatus = allegroStatus,
                     )
                     naZapisz(
                         zebrany,
@@ -1505,6 +1691,10 @@ fun EkranKreatora(
                         czasRealizacji = czas.trim(),
                         status = status,
                         pozycja = pozycja.trim().toIntOrNull() ?: 100,
+                        allegroUrl = allegroUrl.trim().ifBlank { null },
+                        allegroCenaGr = zloteNaGrosze(allegroCena),
+                        allegroId = allegroId.trim().ifBlank { null },
+                        allegroStatus = allegroStatus,
                     )
                     naZapisz(
                         zebrany,

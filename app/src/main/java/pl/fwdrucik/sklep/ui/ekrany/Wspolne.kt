@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -61,7 +61,7 @@ fun PoleZPodpowiedzia(
             trailingIcon = {
                 IconButton(onClick = { pokazPomoc = !pokazPomoc }) {
                     Icon(
-                        if (pokazPomoc) Icons.Filled.Close else Icons.Outlined.HelpOutline,
+                        if (pokazPomoc) Icons.Filled.Close else Icons.AutoMirrored.Outlined.HelpOutline,
                         contentDescription = if (pokazPomoc) {
                             "Schowaj podpowiedź do pola ${podpowiedz.pole}"
                         } else {

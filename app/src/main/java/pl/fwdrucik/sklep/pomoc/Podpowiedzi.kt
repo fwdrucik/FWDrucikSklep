@@ -144,9 +144,24 @@ object Podpowiedzi {
             "Puste pole to zmarnowane miejsce w wyszukiwarce.",
     )
 
+    val allegroUrl = Podpowiedz(
+        pole = "Link do aukcji Allegro",
+        krotko = "Pełny adres URL do Twojej oferty na Allegro.",
+        przyklad = "https://allegro.pl/oferta/stolik-debowy-river-table-1234567890",
+        dlaczego = "Gdy uzupełnisz ten link, na stronie fwdrucik.pl przycisk „Kup” i „Do koszyka” " +
+            "przekieruje klienta prosto na Allegro z obsługą darmowej wysyłki Allegro Smart i Allegro Protect.",
+    )
+
+    val allegroCena = Podpowiedz(
+        pole = "Cena na Allegro",
+        krotko = "Cena w ofercie Allegro (zwykle powiększona o prowizję ~12%).",
+        przyklad = "997,00",
+        dlaczego = "Pozwala kontrolować różnicę między ceną w sklepie a ceną z prowizją marketplace.",
+    )
+
     /** Kolejność w instrukcji — od tego, co blokuje publikację, do drobiazgów. */
     val wszystkie = listOf(
         notatkaDlaAgenta, nazwa, kategoria, opisKrotki, opis, cena, cenaPromo, stan,
-        jednostka, waga, czasRealizacji, status, pozycja, zdjecia, opisZdjecia,
+        jednostka, waga, czasRealizacji, allegroUrl, allegroCena, status, pozycja, zdjecia, opisZdjecia,
     )
 }

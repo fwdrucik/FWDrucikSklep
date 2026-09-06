@@ -125,18 +125,24 @@ class AgentProduktu(
         JAK PISAĆ:
         - Po polsku, konkretnie, ciepło ale bez lania wody.
         - Zero słów: unikalny, wyjątkowy, najwyższej jakości, perfekcyjny,
-          rewelacyjny, niepowtarzalny. Nic nie znaczą i każdy ich używa.
-        - Zwracaj się do klienta na "Ty". Pisz, co dostanie i co z tym zrobi.
+          rewelacyjny, niepowtarzalny, HIT, OKAZJA, NOWOŚĆ, POLECAM. Nic nie znaczą i obniżają pozycję w wyszukiwarce.
+        - Zwracaj się do klienta na "Ty". Pisz, co dostanie i jak wyrób służy na co dzień.
         - Jeśli wyrób jest personalizowany, powiedz wprost, co klient wybiera
           i jak to zamawia.
 
-        POLA:
-        - nazwa: rzecz + materiał + cecha, po której klient szuka. Do 90 znaków.
-          Bez numerów katalogowych.
-        - opis_krotki: jedno–dwa zdania, maks. 400 znaków. To trafia do wyniku
-          Google i na kafelek w sklepie — musi zachęcać i mówić, co to jest.
-        - opis: pełny opis, 2–4 akapity oddzielone pustą linią. Bez nagłówków
-          i bez punktorów.
+        POLA POD SEO ALLEGRO I GOOGLE:
+        - nazwa: MAKSYMALNIE 75 ZNAKÓW (ścisły limit Allegro i optymalna długość Google Title).
+          Wzór: [Typ wyrobu] [Główny materiał] [Styl/Kolor/Cecha] [Wymiar/Zastosowanie]
+          np. "Stolik Kawowy Dąb Żywica Epoksydowa Loft Stalowy Stelaż" (56 zn.).
+          Bez numerów katalogowych i bez spamerskich słów.
+        - opis_krotki: jedno–dwa zdania, do 160–200 znaków. To trafia do Google Meta Description
+          oraz na kafelek w sklepie — musi zachęcać i jasno określać wyrób.
+        - opis: pełny, sprzedający opis zoptymalizowany pod ustandaryzowany kod aukcji Allegro.
+          Zawiera 3-4 akapity:
+          1. Wprowadzenie: co to za wyrób, z jakiej pracowni (F.W. DRUCIK), rękodzieło z Polski.
+          2. Materiały i technologia: drewno, żywica, stal, zabezpieczenie (olejowosk, lakier).
+          3. Punktowa specyfikacja techniczna (Wymiary, Materiał, Kolor, Wykończenie, Producent: F.W. DRUCIK).
+          4. Bezpieczne pakowanie i wysyłka z Allegro Smart!.
         - kategoria: dokładnie jedna z: zywica, druk3d, spawanie, cnc, inne.
         - jednostka: szt., kpl., mb albo m2.
         - cena: jeśli w notatce jest kwota (np. "30zł", "30 zl", "za 30"),
@@ -148,22 +154,22 @@ class AgentProduktu(
           kwotę w pełnych złotych (np. "45", "85", "160", "280"). Nie zostawiaj pustego.
         - waga: szacunkowa waga w gramach (sama liczba), np. "50", "300", "1500".
         - czas_realizacji: szacowany czas wykonania, np. "3-5 dni roboczych", "gotowe od ręki".
-        - opis_zdjecia: co widać na zdjęciu, jedno zdanie. To trafia do atrybutu
+        - opis_zdjecia: co widać na zdjęciu, jedno zdanie z frazą kluczową wyrobu. To trafia do atrybutu
           alt — czyta go Google Grafika i czytnik ekranu osoby niewidomej.
     """.trimIndent()
 
     private val schemat = Schemat(
         type = "OBJECT",
         properties = mapOf(
-            "nazwa" to Schemat("STRING", description = "Nazwa produktu, do 90 znaków"),
-            "opis_krotki" to Schemat("STRING", description = "Do 400 znaków"),
-            "opis" to Schemat("STRING", description = "Pełny opis, akapity"),
+            "nazwa" to Schemat("STRING", description = "Tytuł aukcji zoptymalizowany pod SEO Allegro i Google, MAKSYMALNIE 75 ZNAKÓW. Format: [Rzecz] [Materiał] [Styl/Cechy]"),
+            "opis_krotki" to Schemat("STRING", description = "Zajawka i meta description SEO, maks. 160-200 znaków"),
+            "opis" to Schemat("STRING", description = "Pełny opis wyrobu zoptymalizowany pod kod sekcji aukcji Allegro i Google ze specyfikacją techniczną"),
             "kategoria" to Schemat(
                 "STRING",
                 enum = listOf("zywica", "druk3d", "spawanie", "cnc", "inne"),
             ),
             "jednostka" to Schemat("STRING", enum = listOf("szt.", "kpl.", "mb", "m2")),
-            "opis_zdjecia" to Schemat("STRING", description = "Alt zdjęcia, jedno zdanie"),
+            "opis_zdjecia" to Schemat("STRING", description = "Alt zdjęcia z frazą kluczową dla Google Grafika"),
             "cena" to Schemat(
                 "STRING",
                 description = "Sama liczba w złotych (kwota z notatki LUB oszacowana średnia cena rynkowa dla podobnego wyrobu custom/na zamówienie, np. 45, 120, 250).",
@@ -316,7 +322,7 @@ class AgentProduktu(
                 odp.blad.ifBlank { "Most do Muse nie odpowiedział. Czy komputer jest włączony?" }
             )
         }
-        return json.decodeFromString(wylusknijJson(odp.odpowiedz))
+        return wylusknijSzkic(odp.odpowiedz, notatka)
     }
 
     suspend fun opiszPrzezCopilota(
@@ -356,7 +362,7 @@ class AgentProduktu(
         if (!odp.ok || odp.odpowiedz.isBlank()) {
             throw IOException(odp.blad.ifBlank { "Most do Copilota nie odpowiedział. Czy komputer i przeglądarka są włączone?" })
         }
-        return json.decodeFromString(wylusknijJson(odp.odpowiedz))
+        return wylusknijSzkic(odp.odpowiedz, notatka)
     }
 
     suspend fun opiszPrzezMete(
@@ -394,7 +400,7 @@ class AgentProduktu(
         if (!odp.ok || odp.odpowiedz.isBlank()) {
             throw IOException(odp.blad.ifBlank { "Most do Meta AI nie odpowiedział. Czy komputer i przeglądarka są włączone?" })
         }
-        return json.decodeFromString(wylusknijJson(odp.odpowiedz))
+        return wylusknijSzkic(odp.odpowiedz, notatka)
     }
 
     /**
@@ -446,7 +452,7 @@ class AgentProduktu(
             if (!odp.ok || odp.odpowiedz.isBlank()) {
                 throw IOException(odp.blad.ifBlank { "Most do Meta AI nie odpowiedział." })
             }
-            return json.decodeFromString(wylusknijJson(odp.odpowiedz))
+            return wylusknijSzkic(odp.odpowiedz, "$nazwa $opis")
         }
 
         if (silnik == "muse") {
@@ -458,7 +464,7 @@ class AgentProduktu(
             if (!odp.ok || odp.odpowiedz.isBlank()) {
                 throw IOException(odp.blad.ifBlank { "Most do Muse nie odpowiedział." })
             }
-            return json.decodeFromString(wylusknijJson(odp.odpowiedz))
+            return wylusknijSzkic(odp.odpowiedz, "$nazwa $opis")
         }
 
         if (silnik == "copilot") {
@@ -470,7 +476,7 @@ class AgentProduktu(
             if (!odp.ok || odp.odpowiedz.isBlank()) {
                 throw IOException(odp.blad.ifBlank { "Most do Copilota nie odpowiedział." })
             }
-            return json.decodeFromString(wylusknijJson(odp.odpowiedz))
+            return wylusknijSzkic(odp.odpowiedz, "$nazwa $opis")
         }
 
         if (klucz.isBlank()) throw IOException("Brak klucza Gemini — wybierz Muse albo wpisz klucz.")
@@ -530,15 +536,31 @@ class AgentProduktu(
         throw ostatni
     }
 
-    /** Wyjmuje obiekt JSON z odpowiedzi, która może mieć wokół siebie zdanie albo ```json. */
-    private fun wylusknijJson(tekst: String): String {
+    /** Wyjmuje obiekt JSON lub parsuje czytelny tekst ze szkicem produktu bez wyrzucania błędu. */
+    private fun wylusknijSzkic(tekst: String, zrodlo: String = ""): SzkicProduktu {
         val bez = tekst.replace("```json", "").replace("```", "").trim()
         val od = bez.indexOf('{')
         val do_ = bez.lastIndexOf('}')
-        if (od < 0 || do_ <= od) {
-            throw IOException("Muse odpowiedział, ale nie obiektem JSON — spróbuj jeszcze raz.")
+        if (od >= 0 && do_ > od) {
+            try {
+                return json.decodeFromString(bez.substring(od, do_ + 1))
+            } catch (e: Exception) {
+                // jeśli JSON był ucięty lub zawierał błąd składni, przejdź do parsera awaryjnego
+            }
         }
-        return bez.substring(od, do_ + 1)
+        val linie = bez.lines().map { it.trim() }.filter { it.isNotBlank() }
+        val nazwa = linie.firstOrNull { !it.startsWith("#") && it.length > 3 }?.take(80)
+            ?: zrodlo.take(60).ifBlank { "Nowy produkt" }
+        val opis = bez.trim()
+        val opisKrotki = linie.getOrNull(1)?.take(300) ?: opis.take(300)
+        val cenaRegex = Regex("""(\d+[\d\s]*(?:[.,]\d{2})?)\s*(?:zł|pln)""", RegexOption.IGNORE_CASE)
+        val cena = cenaRegex.find(zrodlo + " " + bez)?.groupValues?.get(1)?.replace(" ", "")?.replace(",", ".") ?: ""
+        return SzkicProduktu(
+            nazwa = nazwa,
+            opisKrotki = opisKrotki,
+            opis = opis,
+            cena = cena,
+        )
     }
 
     /**

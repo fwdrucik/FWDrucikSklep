@@ -15,12 +15,19 @@ pola tak samo jak PHP — zmiana po jednej stronie wymaga zmiany po drugiej.
 
 ## Budowanie
 
-Ani JDK, ani Gradle nie są w `PATH`. Wrapper deklaruje 8.11.1, budujemy binarką 8.9.
+JDK 21 i Gradle są zainstalowane w systemie i skonfigurowane w `PATH`.
+- **JAVA_HOME:** `C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot`
+- **ANDROID_HOME:** `C:\Users\Computer\AppData\Local\Android\Sdk`
+- **Gradle:** 8.11.1 (wywoływalne przez `gradle.cmd` lub `./gradlew`)
 
 ```bash
-JAVA_HOME="C:/Users/Computer/android-build/jdk-21.0.12+8" \
-ANDROID_HOME="C:/Users/Computer/android-build/android-sdk" \
-"C:/Users/Computer/android-build/gradle-8.9/bin/gradle" :app:assembleRelease
+gradle.cmd :app:assembleDebug
+# lub dla release:
+gradle.cmd :app:assembleRelease
 ```
 
-Gotowe APK trafiają do `D:\FWDRUCIK ARCHIWUM\APK_ETAPY\`.
+Gotowe APK kopiuj (nie przenoś) do `D:\FWDRUCIK ARCHIWUM\APK_ETAPY_NOWE\FWDrucikSklep\etapy\`
+w formacie `FWDrucikSklep_NrKolejny_DDMMRR_GGMM_versionCode.apk` (ZASADA STAŁA od 2026-09-05,
+wspólna dla FWDrucik30 / FWDrucikSklep / Antidotum / CureDrucik — pełna procedura:
+`D:\FWDRUCIK ARCHIWUM\APK_ETAPY_NOWE\INSTRUKCJA_NAZEWNICTWA.md`).
+`versionCode` bierz z `aapt dump badging <apk>`, `NrKolejny` to +1 względem poprzedniego w folderze.

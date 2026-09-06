@@ -16,10 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Memory
@@ -200,7 +200,7 @@ private fun Aplikacja(startowyEkran: String?) {
                 actions = {
                     ZegarZData()
                     IconButton(onClick = model::wyloguj) {
-                        Icon(Icons.Filled.Logout, contentDescription = "Wyloguj ze sklepu")
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Wyloguj ze sklepu")
                     }
                 },
             )
@@ -226,7 +226,7 @@ private fun Aplikacja(startowyEkran: String?) {
                                 Zakladka.Magazyn -> Icons.Filled.Inventory2
                                 Zakladka.Zamowienia -> Icons.Filled.Receipt
                                 Zakladka.Studio -> Icons.Filled.Memory
-                                Zakladka.Instrukcja -> Icons.Filled.HelpOutline
+                                Zakladka.Instrukcja -> Icons.AutoMirrored.Filled.HelpOutline
                             }
                             if (pozycja == Zakladka.Zamowienia && nowe > 0) {
                                 BadgedBox(badge = { Badge { Text(nowe.toString()) } }) {
@@ -262,6 +262,7 @@ private fun Aplikacja(startowyEkran: String?) {
                     kopie = stan.kopieRobocze.values.sortedByDescending { it.zapisano },
                     naOtworzKopie = { otworzKreator(it) },
                     naUsunKopie = model::skasujKopie,
+                    naImportujAllegro = model::importujZAukcjiAllegro,
                 )
                 Zakladka.Magazyn -> EkranMagazynu(
                     produkty = stan.produkty,

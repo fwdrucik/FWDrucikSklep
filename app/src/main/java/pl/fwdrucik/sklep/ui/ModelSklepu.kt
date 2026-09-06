@@ -1163,6 +1163,12 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 }
 
                 _stan.update { it.copy(komunikat = "Zapisano „${produkt.nazwa}” i zaktualizowano w sklepie!") }
+                val chmuraCfg = _stan.value.chmura
+                if (chmuraCfg.gotowa) {
+                    runCatching {
+                        MostChmury.przeniesProdukt(getApplication(), chmuraCfg, produkt.copy(id = id))
+                    }
+                }
                 odswiezProdukty()
                 poZapisie(id)
             }
@@ -1205,6 +1211,51 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 odswiezProdukty()
             }
             is Wynik.Blad -> _stan.update { it.copy(blad = w.komunikat) }
+        }
+    }
+
+    fun importujZAukcjiAllegro(url: String, poImportcie: (Int) -> Unit = {}) = wKtorymsMomencie {
+        _stan.update { it.copy(ladowanie = true, komunikat = "Pobieranie danych z aukcji Allegro...") }
+        when (val w = repozytorium.importujAukcjeAllegro(url.trim())) {
+            is Wynik.Jest -> {
+                _stan.update { it.copy(ladowanie = false, komunikat = "Aukcja Allegro została zaimportowana i opublikowana na fwdrucik.pl!") }
+                odswiezProdukty()
+                poImportcie(w.dane.id)
+            }
+            is Wynik.Blad -> {
+                _stan.update { it.copy(ladowanie = false, blad = w.komunikat) }
+            }
+        }
+    }
+
+    fun synchronizujAukcjeAllegro(
+        allegroUrl: String,
+        allegroId: String,
+        nazwa: String,
+        cenaZl: String,
+        kategoria: String = "inne",
+        opis: String = "",
+        opisKrotki: String = "",
+        poSynchronizacji: (Int) -> Unit = {},
+    ) = wKtorymsMomencie {
+        _stan.update { it.copy(ladowanie = true, komunikat = "Wysyłanie ustandaryzowanego schematu Allegro na fwdrucik.pl...") }
+        when (val w = repozytorium.synchronizujAukcjeAllegro(
+            allegroUrl = allegroUrl.trim(),
+            allegroId = allegroId.trim(),
+            nazwa = nazwa.trim(),
+            cena = cenaZl.trim(),
+            kategoria = kategoria,
+            opis = opis,
+            opisKrotki = opisKrotki,
+        )) {
+            is Wynik.Jest -> {
+                _stan.update { it.copy(ladowanie = false, komunikat = "Aukcja Allegro zsynchronizowana ze sklepem fwdrucik.pl!") }
+                odswiezProdukty()
+                poSynchronizacji(w.dane.id)
+            }
+            is Wynik.Blad -> {
+                _stan.update { it.copy(ladowanie = false, blad = w.komunikat) }
+            }
         }
     }
 
