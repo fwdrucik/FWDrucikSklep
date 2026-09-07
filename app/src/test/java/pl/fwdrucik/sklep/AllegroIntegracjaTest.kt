@@ -101,4 +101,12 @@ class AllegroIntegracjaTest {
         assertTrue(niedozwoloneZnalezione.contains("tr"))
         assertTrue(niedozwoloneZnalezione.contains("td"))
     }
+
+    @Test
+    fun testNaglowekUserAgentAllegro() {
+        val oczekiwanyUserAgent = "FWDRUCIK_SKLEP/3.0 (+https://github.com/fwdrucik/FWDrucikSklep#readme)"
+        assertEquals(oczekiwanyUserAgent, pl.fwdrucik.sklep.siec.NaglowekUserAgent.WARTOSC_USER_AGENT)
+        assertTrue(oczekiwanyUserAgent.startsWith("FWDRUCIK_SKLEP/3.0"))
+        assertTrue(oczekiwanyUserAgent.contains("https://github.com/fwdrucik/FWDrucikSklep#readme"))
+    }
 }

@@ -90,3 +90,22 @@ class NaglowekCsrf(private val sloj: SlojNaCiastka) : Interceptor {
         )
     }
 }
+
+/**
+ * Nagłówek User-Agent wymagany m.in. przez integrację i API Allegro.
+ * Zgodny z zalecanym formatem partnera:
+ * FWDRUCIK_SKLEP/3.0 (+https://github.com/fwdrucik/FWDrucikSklep#readme)
+ */
+class NaglowekUserAgent : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val zapytanie = chain.request().newBuilder()
+            .header("User-Agent", WARTOSC_USER_AGENT)
+            .build()
+        return chain.proceed(zapytanie)
+    }
+
+    companion object {
+        const val WARTOSC_USER_AGENT = "FWDRUCIK_SKLEP/3.0 (+https://github.com/fwdrucik/FWDrucikSklep#readme)"
+    }
+}
+

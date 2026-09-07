@@ -18,6 +18,7 @@ import pl.fwdrucik.sklep.dane.Ustawienia
 import pl.fwdrucik.sklep.praca.ObserwatorZamowien
 import pl.fwdrucik.sklep.siec.GeminiApi
 import pl.fwdrucik.sklep.siec.NaglowekCsrf
+import pl.fwdrucik.sklep.siec.NaglowekUserAgent
 import pl.fwdrucik.sklep.siec.SerwerWarsztatu
 import pl.fwdrucik.sklep.siec.SklepApi
 import pl.fwdrucik.sklep.siec.SlojNaCiastka
@@ -82,6 +83,7 @@ class SklepAplikacja : Application(), ImageLoaderFactory {
 
         val klient = OkHttpClient.Builder()
             .cookieJar(sloj)
+            .addInterceptor(NaglowekUserAgent())
             .addInterceptor(NaglowekCsrf(sloj))
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
