@@ -85,6 +85,12 @@ data class StanEkranu(
     val zadaniaWToku: Int = 0,
     /** Id aktualnie otwartego kreatora (0 = nowy, >0 = istniejacy, -1 = zamkniety). */
     val aktywnyKreatorId: Int = -1,
+    val sugerowanaCenaRynkowa: Double? = null,
+    val sugerowanaCenaAllegro: Double? = null,
+    val minCenaRynkowa: Double? = null,
+    val maxCenaRynkowa: Double? = null,
+    val ofertyRynkowe: List<pl.fwdrucik.sklep.siec.OfertaCenowa> = emptyList(),
+    val badanieCenyWToku: Boolean = false,
 )
 
 /**
@@ -253,6 +259,98 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
             ustawienia.skasujKopie(id)
             if (_stan.value.aktywnyKreatorId == id) {
                 ustawienia.zapiszAktywnyKreatorId(-1)
+            }
+        }
+    }
+
+    fun zbadajCeneRynkowa(
+        fraza: String,
+        kategoria: String = "",
+        naWynik: (Double, Double, Double, Double) -> Unit = { _, _, _, _ -> }
+    ) {
+        if (fraza.isBlank()) return
+        viewModelScope.launch {
+            _stan.update { it.copy(badanieCenyWToku = true, komunikat = "Badam ceny na Allegro, OLX, Erli...") }
+            try {
+                val adres = adresRoboczy()
+                val wynik = repozytorium.zbadajCeneRynkowa(adres, fraza, kategoria)
+                when (wynik) {
+                    is Wynik.Jest -> {
+                        val odp = wynik.dane
+                        _stan.update {
+                            it.copy(
+                                badanieCenyWToku = false,
+                                sugerowanaCenaRynkowa = odp.sugerowanaCena,
+                                sugerowanaCenaAllegro = odp.sugerowanaAllegro,
+                                minCenaRynkowa = odp.minCena,
+                                maxCenaRynkowa = odp.maxCena,
+                                ofertyRynkowe = odp.znalezione,
+                                komunikat = "Średnia cena rynkowa: ${odp.sugerowanaCena.toInt()} zł (Allegro: ${odp.sugerowanaAllegro.toInt()} zł)"
+                            )
+                        }
+                        naWynik(odp.sugerowanaCena, odp.sugerowanaAllegro, odp.minCena, odp.maxCena)
+                    }
+                    is Wynik.Blad -> {
+                        _stan.update {
+                            it.copy(
+                                badanieCenyWToku = false,
+                                blad = "Błąd badania cen: ${wynik.komunikat}"
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _stan.update { it.copy(badanieCenyWToku = false, blad = "Błąd połączenia: ${e.message}") }
+            }
+        }
+    }
+
+    fun utworzSzkicAllegro(
+        tytul: String,
+        kategoriaId: String,
+        cenaPln: Double,
+        opisTekst: String,
+        zdjecia: String = "",
+        stanSztuk: Int = 1,
+        naKoniec: (Boolean, String?) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            _stan.update { it.copy(ladowanie = true, komunikat = "Tworzę prywatny szkic na Allegro...") }
+            try {
+                val adres = adresRoboczy()
+                val wynik = repozytorium.utworzSzkicAllegro(
+                    adres = adres,
+                    tytul = tytul,
+                    kategoriaId = kategoriaId,
+                    cenaPln = cenaPln,
+                    opisTekst = opisTekst,
+                    zdjecia = zdjecia,
+                    stanSztuk = stanSztuk
+                )
+                when (wynik) {
+                    is Wynik.Jest -> {
+                        val odp = wynik.dane
+                        _stan.update {
+                            it.copy(
+                                ladowanie = false,
+                                komunikat = "Utworzono prywatny szkic na Allegro!"
+                            )
+                        }
+                        naKoniec(true, odp.url)
+                    }
+                    is Wynik.Blad -> {
+                        _stan.update {
+                            it.copy(
+                                ladowanie = false,
+                                blad = "Błąd tworzenia szkicu Allegro: ${wynik.komunikat}"
+                            )
+                        }
+                        naKoniec(false, null)
+                    }
+                }
+            } catch (e: Exception) {
+                _stan.update { it.copy(ladowanie = false, blad = "Błąd połączenia: ${e.message}") }
+                naKoniec(false, null)
             }
         }
     }

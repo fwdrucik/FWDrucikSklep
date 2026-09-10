@@ -117,10 +117,21 @@ class Ustawienia(context: Context) {
      */
     val kopieRobocze: Flow<Map<Int, KopiaRobocza>> = magazyn.data.map { dane ->
         val tekst = dane[KOPIE].orEmpty()
-        if (tekst.isBlank()) emptyMap()
+        val zDataStore = if (tekst.isBlank()) emptyMap()
         else runCatching {
             Json.decodeFromString<Map<Int, KopiaRobocza>>(tekst)
-        }.getOrDefault(emptyMap())  // uszkodzony zapis nie moze zablokowac kreatora
+        }.getOrDefault(emptyMap())
+
+        // Bezpieczne wczytanie z fizycznych plikow flash telefonu po rozładowaniu baterii
+        val zPlikow = runCatching {
+            katalogSejfow.listFiles()?.mapNotNull { f ->
+                runCatching { Json.decodeFromString<KopiaRobocza>(f.readText()) }.getOrNull()
+            }?.associateBy { it.id } ?: emptyMap()
+        }.getOrDefault(emptyMap())
+
+        val polaczone = (zPlikow + zDataStore)
+        val terazMs = System.currentTimeMillis()
+        polaczone.filter { (_, k) -> k.zapisano == 0L || (terazMs - k.zapisano) <= CZAS_ZYCIA_SEJFU_MS }
     }
 
     /** Id aktualnie otwartego kreatora (0 = nowy, >0 = edycja, -1 = brak). */
@@ -194,16 +205,52 @@ class Ustawienia(context: Context) {
         }
     }
 
+    companion object {
+        const val CZAS_ZYCIA_SEJFU_MS = 24L * 60L * 60L * 1000L // 24 godziny
+        const val MAX_LICZBA_SEJFOW = 15
+    }
+
+    private val katalogSejfow = java.io.File(context.applicationContext.filesDir, "sejfy_robocze").apply { mkdirs() }
+
     suspend fun zapiszKopie(kopia: KopiaRobocza) {
+        val terazMs = System.currentTimeMillis()
+        val kopiaZCzasem = kopia.copy(zapisano = terazMs)
+
+        // 1. Zapis fizyczny na dysku flash telefonu (odporny na nagłe wyłączenie/rozładowanie)
+        runCatching {
+            val plikSejfu = java.io.File(katalogSejfow, "sejf_${kopia.id}.json")
+            plikSejfu.writeText(Json.encodeToString(kopiaZCzasem))
+        }
+
+        // 2. Czyszczenie starych sejfow fizycznych (>24h)
+        runCatching {
+            katalogSejfow.listFiles()?.forEach { f ->
+                if (terazMs - f.lastModified() > CZAS_ZYCIA_SEJFU_MS) {
+                    f.delete()
+                }
+            }
+        }
+
+        // 3. Zapis do DataStore z filtrowaniem 24h i rotacją najstarszych sejfów
         magazyn.edit { dane ->
             val teraz = runCatching {
                 Json.decodeFromString<Map<Int, KopiaRobocza>>(dane[KOPIE].orEmpty())
             }.getOrDefault(emptyMap())
-            dane[KOPIE] = Json.encodeToString<Map<Int, KopiaRobocza>>(teraz + (kopia.id to kopia))
+
+            val wazne = (teraz + (kopia.id to kopiaZCzasem))
+                .filter { (_, k) -> k.zapisano == 0L || (terazMs - k.zapisano) <= CZAS_ZYCIA_SEJFU_MS }
+                .entries.sortedByDescending { it.value.zapisano }
+                .take(MAX_LICZBA_SEJFOW)
+                .associate { it.key to it.value }
+
+            dane[KOPIE] = Json.encodeToString<Map<Int, KopiaRobocza>>(wazne)
         }
     }
 
     suspend fun skasujKopie(id: Int) {
+        runCatching {
+            java.io.File(katalogSejfow, "sejf_${id}.json").delete()
+        }
         magazyn.edit { dane ->
             val teraz = runCatching {
                 Json.decodeFromString<Map<Int, KopiaRobocza>>(dane[KOPIE].orEmpty())

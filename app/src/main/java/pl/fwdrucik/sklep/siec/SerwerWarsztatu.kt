@@ -119,6 +119,31 @@ interface SerwerWarsztatu {
         @Field("prompt") prompt: String,
     ): OdpowiedzMuse
 
+    /**
+     * Bada sugerowaną średnią cenę rynkową na Allegro, OLX, Erli i w internecie.
+     */
+    @GET
+    suspend fun wycena(
+        @Url adres: String,
+        @retrofit2.http.Query("fraza") fraza: String,
+        @retrofit2.http.Query("kategoria") kategoria: String = "",
+    ): OdpowiedzWyceny
+
+    /**
+     * Tworzy prywatny szkic oferty na Allegro (status INACTIVE).
+     */
+    @FormUrlEncoded
+    @POST
+    suspend fun utworzSzkicAllegro(
+        @Url adres: String,
+        @Field("tytul") tytul: String,
+        @Field("kategoria_id") kategoriaId: String,
+        @Field("cena_pln") cenaPln: Double,
+        @Field("opis_tekst") opisTekst: String,
+        @Field("zdjecia") zdjecia: String = "",
+        @Field("stan_sztuk") stanSztuk: Int = 1,
+    ): OdpowiedzSzkicuAllegro
+
     @GET
     suspend fun zadanie(@Url adres: String): StanZadania
 
@@ -201,3 +226,34 @@ data class StanZadania(
     val blad: String? = null,
     @SerialName("wynik_url") val wynikUrl: String? = null,
 )
+
+@Serializable
+data class OfertaCenowa(
+    val portal: String = "",
+    val cena: Double = 0.0,
+    val tytul: String = "",
+)
+
+@Serializable
+data class OdpowiedzWyceny(
+    val ok: Boolean = false,
+    val fraza: String = "",
+    @SerialName("sugerowana_cena") val sugerowanaCena: Double = 0.0,
+    @SerialName("sugerowana_allegro") val sugerowanaAllegro: Double = 0.0,
+    @SerialName("min_cena") val minCena: Double = 0.0,
+    @SerialName("max_cena") val maxCena: Double = 0.0,
+    @SerialName("liczba_ofert") val liczbaOfert: Int = 0,
+    val znalezione: List<OfertaCenowa> = emptyList(),
+    val blad: String? = null,
+)
+
+@Serializable
+data class OdpowiedzSzkicuAllegro(
+    val ok: Boolean = false,
+    val id: String? = null,
+    val url: String? = null,
+    val status: String = "",
+    @SerialName("kategoria_id") val kategoriaId: String? = null,
+    val blad: String? = null,
+)
+

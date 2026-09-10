@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -47,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -127,6 +129,14 @@ fun EkranKreatora(
     naOdrzucKopie: (Int) -> Unit = {},
     naImportujAllegro: ((String) -> Unit)? = null,
     naSynchronizujAllegro: ((String, String, String, String, String, String, String) -> Unit)? = null,
+    badanieCenyWToku: Boolean = false,
+    sugerowanaCenaRynkowa: Double? = null,
+    sugerowanaCenaAllegro: Double? = null,
+    minCenaRynkowa: Double? = null,
+    maxCenaRynkowa: Double? = null,
+    ofertyRynkowe: List<pl.fwdrucik.sklep.siec.OfertaCenowa> = emptyList(),
+    naZbadajCeneRynkowa: ((String, String, (Double, Double, Double, Double) -> Unit) -> Unit)? = null,
+    naUtworzSzkicAllegro: ((String, String, Double, String, String, Int, (Boolean, String?) -> Unit) -> Unit)? = null,
 ) {
     val p = istniejacy ?: Produkt()
 
@@ -183,6 +193,30 @@ fun EkranKreatora(
     }
     var allegroStatus by rememberSaveable(p.id) {
         mutableStateOf(if (p.allegroStatus.isNotBlank() && p.allegroStatus != "brak") p.allegroStatus else kopia?.allegroStatus?.ifBlank { "brak" } ?: "brak")
+    }
+
+    var sugerowanaRynkowaStr by rememberSaveable(p.id) {
+        mutableStateOf(kopia?.sugerowanaCenaRynkowa.orEmpty())
+    }
+    var sugerowanaAllegroStr by rememberSaveable(p.id) {
+        mutableStateOf(kopia?.sugerowanaCenaAllegro.orEmpty())
+    }
+    var zakresCenStr by rememberSaveable(p.id) {
+        mutableStateOf(kopia?.zakresCen.orEmpty())
+    }
+    var ostatnieWcisniecieWstecz by rememberSaveable { mutableLongStateOf(0L) }
+    var tworzenieSzkicuWToku by remember { mutableStateOf(false) }
+
+    LaunchedEffect(sugerowanaCenaRynkowa, sugerowanaCenaAllegro, minCenaRynkowa, maxCenaRynkowa) {
+        if (sugerowanaCenaRynkowa != null && sugerowanaCenaRynkowa > 0) {
+            sugerowanaRynkowaStr = "%.2f".format(java.util.Locale.US, sugerowanaCenaRynkowa)
+        }
+        if (sugerowanaCenaAllegro != null && sugerowanaCenaAllegro > 0) {
+            sugerowanaAllegroStr = "%.2f".format(java.util.Locale.US, sugerowanaCenaAllegro)
+        }
+        if (minCenaRynkowa != null && maxCenaRynkowa != null && minCenaRynkowa > 0) {
+            zakresCenStr = "%.0f - %.0f zł".format(java.util.Locale.US, minCenaRynkowa, maxCenaRynkowa)
+        }
     }
 
     var lokalneZdjecie by remember(p.id) {
@@ -259,18 +293,24 @@ fun EkranKreatora(
 
     // Wstecz NIE przerywa roboty agenta.
     //
-    // PO CO: pojedyncze dotkniecie „wstecz" zamykalo kreator w trakcie liczenia
-    // animacji — a to sa minuty pracy karty albo punkty wydane w Veo. Robota
-    // szla dalej w tle, tylko wynik nie mial juz gdzie wrocic.
+    // Podwójne wciśnięcie WSTECZ chroni przed przypadkowym wyjściem i utratą szkicu
     androidx.activity.compose.BackHandler(enabled = true) {
-        if (agentPracuje) {
+        val teraz = System.currentTimeMillis()
+        if (agentPracuje || badanieCenyWToku || tworzenieSzkicuWToku) {
             Toast.makeText(
                 context,
-                "Trwa generowanie materiału — poczekaj na ukończenie zadania.",
+                "Trwa wykonywanie zadania w tle — poczekaj na ukończenie.",
                 Toast.LENGTH_SHORT
             ).show()
-        } else {
+        } else if (teraz - ostatnieWcisniecieWstecz < 2000L) {
             naWyjscie()
+        } else {
+            ostatnieWcisniecieWstecz = teraz
+            Toast.makeText(
+                context,
+                "Naciśnij WSTECZ ponownie w ciągu 2s, aby opuścić kreator",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
     var doUzupelnienia by remember(p.id) { mutableStateOf<List<String>>(emptyList()) }
@@ -326,6 +366,9 @@ fun EkranKreatora(
             if (allegroCena.isBlank() && kopia.allegroCena.isNotBlank()) allegroCena = kopia.allegroCena
             if (allegroId.isBlank() && kopia.allegroId.isNotBlank()) allegroId = kopia.allegroId
             if (allegroStatus == "brak" && kopia.allegroStatus.isNotBlank() && kopia.allegroStatus != "brak") allegroStatus = kopia.allegroStatus
+            if (sugerowanaRynkowaStr.isBlank() && kopia.sugerowanaCenaRynkowa.isNotBlank()) sugerowanaRynkowaStr = kopia.sugerowanaCenaRynkowa
+            if (sugerowanaAllegroStr.isBlank() && kopia.sugerowanaCenaAllegro.isNotBlank()) sugerowanaAllegroStr = kopia.sugerowanaCenaAllegro
+            if (zakresCenStr.isBlank() && kopia.zakresCen.isNotBlank()) zakresCenStr = kopia.zakresCen
         }
     }
 
@@ -344,6 +387,9 @@ fun EkranKreatora(
         allegroCena = allegroCena,
         allegroId = allegroId,
         allegroStatus = allegroStatus,
+        sugerowanaCenaRynkowa = sugerowanaRynkowaStr,
+        sugerowanaCenaAllegro = sugerowanaAllegroStr,
+        zakresCen = zakresCenStr,
     )
     LaunchedEffect(biezaca) { naZapiszKopie(biezaca) }
 
@@ -843,6 +889,340 @@ fun EkranKreatora(
             style = MaterialTheme.typography.headlineSmall,
         )
 
+        // =====================================================================
+        // SZYBKI ASYSTENT DLA ŻONY (KROK PO KROKU 1-KLIK)
+        // =====================================================================
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 10.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+            ),
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+        ) {
+            Column(Modifier.padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("✨", style = MaterialTheme.typography.titleLarge)
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            "Szybki Asystent (Krok po kroku)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "Od zdjęcia na stole do prywatnego szkicu na Allegro",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // KROK 1: Zdjęcie
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (lokalneZdjecie != null) "✅ Krok 1: Zdjęcie wybrane" else "📸 Krok 1: Wczytaj zdjęcie",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        color = if (lokalneZdjecie != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                if (lokalneZdjecie == null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val plik = Aparat.nowePlikDoZdjecia(context)
+                                val adres = Aparat.adresDlaAparatu(context, plik)
+                                adresZAparatu = adres
+                                zrobZdjecie.launch(adres)
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Filled.PhotoCamera, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Aparat")
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                wybierzDoAgenta.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Filled.AddAPhoto, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Galeria")
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // KROK 2: Opis & Wycena w internecie
+                Text(
+                    "🔍 Krok 2: Opis i badanie cen w internecie",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            val frazaDoSzukania = nazwa.ifBlank { notatka.take(50).ifBlank { "rękodzieło artystyczne" } }
+                            naZbadajCeneRynkowa?.invoke(frazaDoSzukania, kategoria) { sug, sugAllegro, minC, maxC ->
+                                if (cena.isBlank()) cena = "%.2f".format(java.util.Locale.US, sug)
+                                if (allegroCena.isBlank()) allegroCena = "%.2f".format(java.util.Locale.US, sugAllegro)
+                            }
+                        },
+                        enabled = !badanieCenyWToku && (nazwa.isNotBlank() || notatka.isNotBlank() || lokalneZdjecie != null),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (badanieCenyWToku) {
+                            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Badam rynek...", style = MaterialTheme.typography.labelSmall)
+                        } else {
+                            Text("🔍 Zbadaj ceny (Allegro/OLX)", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = { pytanieOSilnik = "opis" },
+                        enabled = lokalneZdjecie != null && !agentPracuje,
+                        modifier = Modifier.weight(0.9f)
+                    ) {
+                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Napisz opis", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+
+                // Wyniki badania cen rynkowych
+                if (sugerowanaRynkowaStr.isNotBlank() || sugerowanaCenaRynkowa != null) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(Modifier.padding(10.dp)) {
+                            Text(
+                                "📊 Analiza rynkowa z portali:",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            val sRyn = sugerowanaRynkowaStr.ifBlank { sugerowanaCenaRynkowa?.let { "%.2f".format(java.util.Locale.US, it) }.orEmpty() }
+                            val sAll = sugerowanaAllegroStr.ifBlank { sugerowanaCenaAllegro?.let { "%.2f".format(java.util.Locale.US, it) }.orEmpty() }
+                            Text(
+                                "• Średnia rynkowa: $sRyn zł" +
+                                        (if (zakresCenStr.isNotBlank()) " (zakres: $zakresCenStr)" else ""),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                "• Sugerowana na Allegro (+12% prowizji): $sAll zł",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                if (sRyn.isNotBlank()) {
+                                    OutlinedButton(
+                                        onClick = { cena = sRyn },
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Ustaw do sklepu ($sRyn zł)", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                    }
+                                }
+                                if (sAll.isNotBlank()) {
+                                    Button(
+                                        onClick = { allegroCena = sAll },
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Ustaw na Allegro ($sAll zł)", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // KROK 3: Tło i Światło
+                Text("🎨 Krok 3: Tło i światło studyjne", style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { pytanieOZadaniuZdjecia = true },
+                        enabled = lokalneZdjecie != null && !agentPracuje,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Filled.PhotoFilter, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("🌸 Pastelowe studio", style = MaterialTheme.typography.labelSmall)
+                    }
+                    Button(
+                        onClick = { pytanieOSilnik = "auto-ciag" },
+                        enabled = lokalneZdjecie != null && !agentPracuje,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Wszystko na raz (AI)", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // KROK 4: Animacja 360°
+                Text(
+                    if (animacja != null) "✅ Krok 4: Animacja 360° gotowa" else "🔄 Krok 4: Animacja obrotu 360°",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color = if (animacja != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+                if (animacja == null) {
+                    OutlinedButton(
+                        onClick = { pytanieOSilnik = "animacja" },
+                        enabled = lokalneZdjecie != null && !agentPracuje,
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                    ) {
+                        Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Utwórz obrót 360° (Google Flow / Meta AI)")
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // KROK 5: Prywatny Szkic na Allegro (REST API)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f))
+                ) {
+                    Column(Modifier.padding(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🟠", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Krok 5: Utwórz prywatny szkic na Allegro",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
+                        Text(
+                            "Status INACTIVE — oferta jest w 100% prywatna, niewidoczna dla kupujących, dopóki sama jej nie sprawdzisz.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp, bottom = 6.dp)
+                        )
+
+                        if (allegroId.isNotBlank() && allegroUrl.isNotBlank()) {
+                            Text(
+                                "✅ Szkic podpięty (ID: $allegroId)",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        runCatching {
+                                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(allegroUrl.trim()))
+                                            context.startActivity(intent)
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Otwórz na Allegro ↗", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        } else {
+                            val tytulGotowy = pl.fwdrucik.sklep.narzedzia.AllegroFormat.oczyscTytul(nazwa.ifBlank { notatka })
+                            if (tytulGotowy.isNotBlank()) {
+                                Text(
+                                    "Tytuł oferty: „$tytulGotowy” (${tytulGotowy.length}/75 znaków)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Button(
+                                onClick = {
+                                    val tytulOczyszczony = pl.fwdrucik.sklep.narzedzia.AllegroFormat.oczyscTytul(nazwa.ifBlank { notatka })
+                                    val cenaKwota = (zloteNaGrosze(allegroCena.ifBlank { cena }) ?: 0) / 100.0
+                                    val htmlOpis = pl.fwdrucik.sklep.narzedzia.AllegroFormat.zbudujOpisHtml(nazwa, opisKrotki, opis)
+                                    val urlZdjecia = p.obrazy.firstOrNull()?.src?.let {
+                                        if (it.startsWith("http")) it else BuildConfig.ADRES_API + it
+                                    }.orEmpty()
+
+                                    tworzenieSzkicuWToku = true
+                                    naUtworzSzkicAllegro?.invoke(
+                                        tytulOczyszczony,
+                                        kategoria,
+                                        cenaKwota,
+                                        htmlOpis,
+                                        urlZdjecia,
+                                        stan.toIntOrNull() ?: 1
+                                    ) { sukces, zwroconyUrl ->
+                                        tworzenieSzkicuWToku = false
+                                        if (sukces) {
+                                            allegroStatus = "szkic"
+                                            if (zwroconyUrl != null) {
+                                                allegroUrl = zwroconyUrl
+                                                val wyciagnieteId = zwroconyUrl.substringAfterLast("/")
+                                                if (wyciagnieteId.isNotBlank() && wyciagnieteId.all { it.isDigit() }) {
+                                                    allegroId = wyciagnieteId
+                                                }
+                                            }
+                                            Toast.makeText(context, "Prywatny szkic na Allegro utworzony!", Toast.LENGTH_LONG).show()
+                                        } else {
+                                            Toast.makeText(context, "Błąd tworzenia szkicu Allegro — sprawdź komputer w warsztacie", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                enabled = !tworzenieSzkicuWToku && (nazwa.isNotBlank() || notatka.isNotBlank()) && (cena.isNotBlank() || allegroCena.isNotBlank()),
+                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                            ) {
+                                if (tworzenieSzkicuWToku) {
+                                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onTertiary)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Tworzę szkic...", style = MaterialTheme.typography.labelSmall)
+                                } else {
+                                    Text("🛒 Utwórz prywatny szkic na Allegro (INACTIVE)")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+
         // Baner pamieci roboczej. Nic nie przywracamy sami: podmiana pol pod
         // rekami uzytkownika bylaby gorsza niz utrata kopii. Decyzja nalezy
         // do czlowieka, a odrzucenie kasuje kopie na dobre.
@@ -1326,6 +1706,53 @@ fun EkranKreatora(
                         onClick = { allegroStatus = klucz },
                         label = { Text(etykieta, style = MaterialTheme.typography.labelSmall) }
                     )
+                }
+            }
+
+            Button(
+                onClick = {
+                    val tytulOczyszczony = pl.fwdrucik.sklep.narzedzia.AllegroFormat.oczyscTytul(nazwa.ifBlank { notatka })
+                    val cenaKwota = (zloteNaGrosze(allegroCena.ifBlank { cena }) ?: 0) / 100.0
+                    val htmlOpis = pl.fwdrucik.sklep.narzedzia.AllegroFormat.zbudujOpisHtml(nazwa, opisKrotki, opis)
+                    val urlZdjecia = p.obrazy.firstOrNull()?.src?.let {
+                        if (it.startsWith("http")) it else BuildConfig.ADRES_API + it
+                    }.orEmpty()
+
+                    tworzenieSzkicuWToku = true
+                    naUtworzSzkicAllegro?.invoke(
+                        tytulOczyszczony,
+                        kategoria,
+                        cenaKwota,
+                        htmlOpis,
+                        urlZdjecia,
+                        stan.toIntOrNull() ?: 1
+                    ) { sukces, zwroconyUrl ->
+                        tworzenieSzkicuWToku = false
+                        if (sukces) {
+                            allegroStatus = "szkic"
+                            if (zwroconyUrl != null) {
+                                allegroUrl = zwroconyUrl
+                                val wyciagnieteId = zwroconyUrl.substringAfterLast("/")
+                                if (wyciagnieteId.isNotBlank() && wyciagnieteId.all { it.isDigit() }) {
+                                    allegroId = wyciagnieteId
+                                }
+                            }
+                            Toast.makeText(context, "Prywatny szkic na Allegro utworzony!", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "Błąd tworzenia szkicu Allegro — sprawdź połączenie", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
+                enabled = !tworzenieSzkicuWToku && (nazwa.isNotBlank() || notatka.isNotBlank()) && (cena.isNotBlank() || allegroCena.isNotBlank())
+            ) {
+                if (tworzenieSzkicuWToku) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onTertiary)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Tworzę prywatny szkic...", style = MaterialTheme.typography.labelMedium)
+                } else {
+                    Text("🛒 Utwórz prywatny szkic na Allegro (REST API)", style = MaterialTheme.typography.labelMedium)
                 }
             }
 

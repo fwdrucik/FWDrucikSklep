@@ -200,7 +200,10 @@ data class KopiaRobocza(
     val allegroCena: String = "",
     val allegroId: String = "",
     val allegroStatus: String = "brak",
-    /** Kiedy zapisana — millisekundy, do pokazania godziny na banerze. */
+    val sugerowanaCenaRynkowa: String = "",
+    val sugerowanaCenaAllegro: String = "",
+    val zakresCen: String = "",
+    /** Kiedy zapisana — millisekundy, do pokazania godziny na banerze i limitu 24h. */
     val zapisano: Long = 0,
 ) {
     /** Pusta kopia nie ma czego przywracac — nie zawracamy nia glowy. */

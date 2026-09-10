@@ -133,6 +133,14 @@ private fun KreatorZawartosc(
                         model.zamknijKreator()
                         naZamknij()
                     },
+                    badanieCenyWToku = stan.badanieCenyWToku,
+                    sugerowanaCenaRynkowa = stan.sugerowanaCenaRynkowa,
+                    sugerowanaCenaAllegro = stan.sugerowanaCenaAllegro,
+                    minCenaRynkowa = stan.minCenaRynkowa,
+                    maxCenaRynkowa = stan.maxCenaRynkowa,
+                    ofertyRynkowe = stan.ofertyRynkowe,
+                    naZbadajCeneRynkowa = model::zbadajCeneRynkowa,
+                    naUtworzSzkicAllegro = model::utworzSzkicAllegro,
                 )
             }
         }

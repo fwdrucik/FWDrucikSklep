@@ -419,6 +419,36 @@ class Repozytorium(
         }
     }
 
+    suspend fun zbadajCeneRynkowa(adres: String, fraza: String, kategoria: String = ""): Wynik<pl.fwdrucik.sklep.siec.OdpowiedzWyceny> =
+        wywolaj {
+            warsztat.wycena(
+                adres = "$adres/wycena",
+                fraza = fraza,
+                kategoria = kategoria
+            )
+        }
+
+    suspend fun utworzSzkicAllegro(
+        adres: String,
+        tytul: String,
+        kategoriaId: String,
+        cenaPln: Double,
+        opisTekst: String,
+        zdjecia: String = "",
+        stanSztuk: Int = 1
+    ): Wynik<pl.fwdrucik.sklep.siec.OdpowiedzSzkicuAllegro> =
+        wywolaj {
+            warsztat.utworzSzkicAllegro(
+                adres = "$adres/allegro/szkic",
+                tytul = tytul,
+                kategoriaId = kategoriaId,
+                cenaPln = cenaPln,
+                opisTekst = opisTekst,
+                zdjecia = zdjecia,
+                stanSztuk = stanSztuk
+            )
+        }
+
     private fun pole(wartosc: String): RequestBody =
         wartosc.toRequestBody("text/plain".toMediaType())
 
