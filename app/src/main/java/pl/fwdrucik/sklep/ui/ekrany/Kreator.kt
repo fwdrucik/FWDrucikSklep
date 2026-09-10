@@ -134,6 +134,10 @@ fun EkranKreatora(
     sugerowanaCenaAllegro: Double? = null,
     minCenaRynkowa: Double? = null,
     maxCenaRynkowa: Double? = null,
+    /** Czy kwoty pochodzÄ… ze zmierzonych ofert Allegro, czy z tabeli awaryjnej. */
+    wycenaZmierzona: Boolean = false,
+    /** TreĹ›Ä‡ ostrzeĹĽenia, gdy kwota jest szacunkiem. */
+    ostrzezenieWyceny: String? = null,
     ofertyRynkowe: List<pl.fwdrucik.sklep.siec.OfertaCenowa> = emptyList(),
     naZbadajCeneRynkowa: ((String, String, (Double, Double, Double, Double) -> Unit) -> Unit)? = null,
     naUtworzSzkicAllegro: ((String, String, Double, String, String, Int, (Boolean, String?) -> Unit) -> Unit)? = null,
@@ -993,7 +997,9 @@ fun EkranKreatora(
                             Spacer(Modifier.width(6.dp))
                             Text("Badam rynek...", style = MaterialTheme.typography.labelSmall)
                         } else {
-                            Text("🔍 Zbadaj ceny (Allegro/OLX)", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                            // Nazwa mowi, co naprawde sie dzieje: OLX i Erli nigdy nie
+                        // byly odpytywane, a obiecywala je etykieta przycisku.
+                        Text("🔍 Sprawdź ceny na Allegro", style = MaterialTheme.typography.labelSmall, maxLines = 1)
                         }
                     }
 
@@ -1016,16 +1022,31 @@ fun EkranKreatora(
                     ) {
                         Column(Modifier.padding(10.dp)) {
                             Text(
-                                "📊 Analiza rynkowa z portali:",
+                                if (wycenaZmierzona) "📊 Ceny zmierzone na Allegro:"
+                                else "⚠️ SZACUNEK — to nie są ceny z rynku:",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = if (wycenaZmierzona) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.error
                             )
+                            // Szacunek potrafi rozminac sie z rynkiem trzykrotnie,
+                            // a wyglada na ekranie tak samo jak zmierzona cena.
+                            // Powod podajemy wprost, zeby dalo sie zdecydowac,
+                            // czy sprawdzic cene recznie.
+                            if (!wycenaZmierzona && !ostrzezenieWyceny.isNullOrBlank()) {
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    ostrzezenieWyceny,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                             Spacer(Modifier.height(4.dp))
                             val sRyn = sugerowanaRynkowaStr.ifBlank { sugerowanaCenaRynkowa?.let { "%.2f".format(java.util.Locale.US, it) }.orEmpty() }
                             val sAll = sugerowanaAllegroStr.ifBlank { sugerowanaCenaAllegro?.let { "%.2f".format(java.util.Locale.US, it) }.orEmpty() }
                             Text(
-                                "• Średnia rynkowa: $sRyn zł" +
+                                (if (wycenaZmierzona) "• Mediana ofert: " else "• Szacowana cena: ") +
+                                        "$sRyn zł" +
                                         (if (zakresCenStr.isNotBlank()) " (zakres: $zakresCenStr)" else ""),
                                 style = MaterialTheme.typography.bodySmall
                             )

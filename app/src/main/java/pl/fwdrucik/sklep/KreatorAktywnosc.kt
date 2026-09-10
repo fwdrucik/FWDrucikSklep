@@ -138,6 +138,8 @@ private fun KreatorZawartosc(
                     sugerowanaCenaAllegro = stan.sugerowanaCenaAllegro,
                     minCenaRynkowa = stan.minCenaRynkowa,
                     maxCenaRynkowa = stan.maxCenaRynkowa,
+                    wycenaZmierzona = stan.wycenaZmierzona,
+                    ostrzezenieWyceny = stan.ostrzezenieWyceny,
                     ofertyRynkowe = stan.ofertyRynkowe,
                     naZbadajCeneRynkowa = model::zbadajCeneRynkowa,
                     naUtworzSzkicAllegro = model::utworzSzkicAllegro,

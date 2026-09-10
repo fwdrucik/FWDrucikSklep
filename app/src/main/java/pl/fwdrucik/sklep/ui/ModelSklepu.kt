@@ -91,6 +91,17 @@ data class StanEkranu(
     val maxCenaRynkowa: Double? = null,
     val ofertyRynkowe: List<pl.fwdrucik.sklep.siec.OfertaCenowa> = emptyList(),
     val badanieCenyWToku: Boolean = false,
+    /**
+     * Czy ostatnia wycena to zmierzony rynek, czy tabela awaryjna.
+     *
+     * PO CO OSOBNE POLE: do etapu 105 ekran pokazywal samÄ… kwotÄ™, a serwer
+     * po cichu podstawial oszacowanie, gdy Allegro nie oddalo listingu.
+     * Kwota wygladala tak samo w obu przypadkach, a roznila sie nawet
+     * trzykrotnie â€” i to na niej ustawia sie cene wyrobu.
+     */
+    val wycenaZmierzona: Boolean = false,
+    /** TreĹ›Ä‡ ostrzeĹĽenia z serwera; null, gdy kwota jest z realnych ofert. */
+    val ostrzezenieWyceny: String? = null,
 )
 
 /**
@@ -270,7 +281,7 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
     ) {
         if (fraza.isBlank()) return
         viewModelScope.launch {
-            _stan.update { it.copy(badanieCenyWToku = true, komunikat = "Badam ceny na Allegro, OLX, Erli...") }
+            _stan.update { it.copy(badanieCenyWToku = true, komunikat = "Sprawdzam ceny na Allegro...") }
             try {
                 val adres = adresRoboczy()
                 val wynik = repozytorium.zbadajCeneRynkowa(adres, fraza, kategoria)
@@ -285,7 +296,18 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                                 minCenaRynkowa = odp.minCena,
                                 maxCenaRynkowa = odp.maxCena,
                                 ofertyRynkowe = odp.znalezione,
-                                komunikat = "Średnia cena rynkowa: ${odp.sugerowanaCena.toInt()} zł (Allegro: ${odp.sugerowanaAllegro.toInt()} zł)"
+                                wycenaZmierzona = odp.zmierzoneNaRynku,
+                                ostrzezenieWyceny = odp.ostrzezenie.takeIf { _ -> !odp.zmierzoneNaRynku },
+                                komunikat = if (odp.zmierzoneNaRynku) {
+                                    "Mediana z ${odp.liczbaOfert} ofert Allegro: " +
+                                        "${odp.sugerowanaCena.toInt()} zł " +
+                                        "(na Allegro wystaw ${odp.sugerowanaAllegro.toInt()} zł)"
+                                } else {
+                                    // Bez slowa „szacunek" w tresci komunikat wyglada
+                                    // identycznie jak zmierzona cena — a nia nie jest.
+                                    "SZACUNEK, nie cena rynkowa: ok. " +
+                                        "${odp.sugerowanaCena.toInt()} zł — sprawdź sama na Allegro"
+                                }
                             )
                         }
                         naWynik(odp.sugerowanaCena, odp.sugerowanaAllegro, odp.minCena, odp.maxCena)

@@ -240,12 +240,28 @@ data class OdpowiedzWyceny(
     val fraza: String = "",
     @SerialName("sugerowana_cena") val sugerowanaCena: Double = 0.0,
     @SerialName("sugerowana_allegro") val sugerowanaAllegro: Double = 0.0,
+    @SerialName("srednia_cena") val sredniaCena: Double = 0.0,
     @SerialName("min_cena") val minCena: Double = 0.0,
     @SerialName("max_cena") val maxCena: Double = 0.0,
     @SerialName("liczba_ofert") val liczbaOfert: Int = 0,
+    /**
+     * SkÄ…d wziÄ™Ĺ‚a siÄ™ kwota. To NIE jest pole informacyjne â€” na tej liczbie
+     * ustawia siÄ™ cenÄ™ wyrobu, wiÄ™c ekran musi odrĂłĹĽniÄ‡ zmierzony rynek od
+     * zgadywania.
+     *
+     * â€žallegro-api" / â€žallegro-listing" â€” mediana z ĹĽywych ofert Allegro.
+     * â€žestymacja" â€” tabela pracowni, gdy Allegro nie oddaĹ‚o listingu.
+     */
+    val zrodlo: String = "",
+    /** WypeĹ‚nione wyĹ‚Ä…cznie przy â€žestymacja" â€” treĹ›Ä‡ do pokazania wprost. */
+    val ostrzezenie: String? = null,
     val znalezione: List<OfertaCenowa> = emptyList(),
     val blad: String? = null,
-)
+) {
+    /** Czy kwota pochodzi z realnych ofert, a nie z tabeli awaryjnej. */
+    val zmierzoneNaRynku: Boolean
+        get() = zrodlo.startsWith("allegro")
+}
 
 @Serializable
 data class OdpowiedzSzkicuAllegro(
