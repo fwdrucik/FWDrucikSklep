@@ -113,7 +113,17 @@ data class StanEkranu(
     val wycenaZmierzona: Boolean = false,
     /** TreĹ›Ä‡ ostrzeĹĽenia z serwera; null, gdy kwota jest z realnych ofert. */
     val ostrzezenieWyceny: String? = null,
-)
+) {
+    /** Czyścimy sesję i jej zawartość; adres komputera jest zwykłą konfiguracją. */
+    internal fun poWylogowaniu(): StanEkranu = StanEkranu(
+        zalogowany = false,
+        adresWarsztatu = adresWarsztatu,
+    )
+
+    /** Pierwsza kontrola nie musi czekać na emisję ustawień z DataStore. */
+    internal fun adresDoKontrolki(adresUstawiony: String): String =
+        adresWarsztatu.ifBlank { adresUstawiony.ifBlank { DOMYSLNY_ADRES_WARSZTATU } }
+}
 
 /**
  * Jedna czynnosc agenta albo komputera — do podejrzenia po fakcie.
@@ -162,6 +172,13 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
 
     private val _stan = MutableStateFlow(StanEkranu(zalogowany = repozytorium.czyZalogowany()))
     val stan: StateFlow<StanEkranu> = _stan.asStateFlow()
+
+    /**
+     * Adres wpisany w ustawieniach, osobny od ostatniego działającego adresu.
+     * Przełączenie na Tailscale nie nadpisuje ustawienia użytkownika.
+     * Musi być zainicjalizowany przed init: kontrolka może ruszyć od razu.
+     */
+    private var adresUstawiony: String = ""
 
     init {
         if (_stan.value.zalogowany) odswiez()
@@ -763,17 +780,6 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
      * Czesciej nie ma sensu: backendy nie wstaja szybciej.
      */
     /**
-     * Adres wpisany w ustawieniach — surowy, bez automatycznej podmiany.
-     *
-     * Trzymany osobno od `stan.adresWarsztatu`, bo ten drugi jest adresem
-     * ROBOCZYM: tym, pod ktorym serwer faktycznie odpowiedzial. Gdyby oba byly
-     * jednym polem, kazde przelaczenie na Tailscale nadpisywaloby czlowiekowi
-     * ustawienie, a po powrocie do warsztatu apka trzymalaby sie adresu
-     * zdalnego mimo szybszej sieci lokalnej.
-     */
-    private var adresUstawiony: String = ""
-
-    /**
      * Pyta o `/stan` po kolei pod kandydujacymi adresami i oddaje ten, ktory
      * odpowiedzial.
      *
@@ -840,7 +846,7 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 // Tu bierzemy adres wprost ze stanu: `zapytajOStan` ponizej i tak
                 // przechodzi po kandydatach, a `adresRoboczy()` robilby to samo
                 // drugi raz, czyli dwa komplety prob co dwadziescia sekund.
-                val adres = _stan.value.adresWarsztatu
+                val adres = _stan.value.adresDoKontrolki(adresUstawiony)
                 if (adres.isNotBlank()) {
                     try {
                         val (dzialajacy, s) = zapytajOStan(adres)
@@ -1319,7 +1325,7 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
 
     fun wyloguj() = wKtorymsMomencie {
         repozytorium.wyloguj()
-        _stan.value = StanEkranu(zalogowany = false)
+        _stan.update { it.poWylogowaniu() }
     }
 
     fun odswiez() = wKtorymsMomencie {
