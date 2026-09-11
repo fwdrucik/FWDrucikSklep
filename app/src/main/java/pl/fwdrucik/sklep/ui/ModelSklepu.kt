@@ -12,6 +12,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import pl.fwdrucik.sklep.siec.KatalogAi
+import pl.fwdrucik.sklep.siec.DaneOpisuAi
+import pl.fwdrucik.sklep.siec.OpisAi
 import pl.fwdrucik.sklep.SklepAplikacja
 import pl.fwdrucik.sklep.dane.Produkt
 import pl.fwdrucik.sklep.dane.SzkicProduktu
@@ -22,6 +26,7 @@ import pl.fwdrucik.sklep.dane.TrojkaFirebase
 import pl.fwdrucik.sklep.dane.KopiaRobocza
 import pl.fwdrucik.sklep.dane.MostChmury
 import pl.fwdrucik.sklep.dane.Polecenia
+import pl.fwdrucik.sklep.dane.bladPrywatnegoSzkicu
 import pl.fwdrucik.sklep.dane.Poprawka
 import pl.fwdrucik.sklep.dane.Zamowienie
 import pl.fwdrucik.sklep.dane.ADRES_ZDALNY_WARSZTATU
@@ -58,6 +63,10 @@ data class StanEkranu(
     val stanChmury: StanUslugi = StanUslugi(),
     /** Pamiec robocza kreatora: id produktu (0 = nowy) -> to, co bylo wpisane. */
     val kopieRobocze: Map<Int, KopiaRobocza> = emptyMap(),
+    val kopieWczytane: Boolean = false,
+    val katalogAi: KatalogAi = KatalogAi(),
+    val katalogWToku: Boolean = false,
+    val bladKatalogu: String? = null,
     /** Wybrane modele Gemini i lista do wyboru, pobierana z konta przy sprawdzeniu klucza. */
     val modelOpisu: String = "",
     val modelObrazu: String = "",
@@ -91,6 +100,8 @@ data class StanEkranu(
     val maxCenaRynkowa: Double? = null,
     val ofertyRynkowe: List<pl.fwdrucik.sklep.siec.OfertaCenowa> = emptyList(),
     val badanieCenyWToku: Boolean = false,
+    val bladWyceny: String? = null,
+    val wyszukiwanieKategorii: StanWyszukiwaniaKategorii = StanWyszukiwaniaKategorii(),
     /**
      * Czy ostatnia wycena to zmierzony rynek, czy tabela awaryjna.
      *
@@ -119,6 +130,15 @@ data class Czynnosc(
     val plik: String = "",
     val udana: Boolean = true,
     val czas: Long = System.currentTimeMillis(),
+)
+
+/** Wynik odczytu kategorii; wybór użytkownika jest przechowywany osobno w kopii. */
+data class StanWyszukiwaniaKategorii(
+    val fraza: String = "",
+    val wToku: Boolean = false,
+    val sprawdzono: Boolean = false,
+    val kategorie: List<pl.fwdrucik.sklep.siec.KategoriaAllegro> = emptyList(),
+    val blad: String? = null,
 )
 
 /**
@@ -163,7 +183,7 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
         }
         viewModelScope.launch {
             ustawienia.kopieRobocze.collect { kopie ->
-                _stan.update { it.copy(kopieRobocze = kopie) }
+                _stan.update { it.copy(kopieRobocze = kopie, kopieWczytane = true) }
             }
         }
         viewModelScope.launch {
@@ -198,12 +218,76 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
     }
 
     // ------------------------------------------------- pamiec robocza
+    fun odswiezKatalogAi() {
+        if (_stan.value.katalogWToku) return
+        _stan.update { it.copy(katalogWToku = true, bladKatalogu = null) }
+        viewModelScope.launch {
+            try {
+                val katalog = repozytorium.modeleAi(adresRoboczy())
+                _stan.update { it.copy(katalogAi = katalog) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _stan.update { it.copy(katalogAi = KatalogAi(), bladKatalogu =
+                    "Nie można pobrać listy modeli. Sprawdź połączenie z warsztatem i odśwież listę. Możesz dalej pisać ręcznie.") }
+            } finally {
+                _stan.update { it.copy(katalogWToku = false) }
+            }
+        }
+    }
+
+    /** Konkretny wybór sprawdzamy ponownie przed wysłaniem; nie podmieniamy go po cichu. */
+    private suspend fun sprawdzModelAi(adres: String, id: String, rodzaj: String) {
+        if (id == "auto" || id.isBlank()) return
+        val katalog = repozytorium.modeleAi(adres)
+        _stan.update { it.copy(katalogAi = katalog) }
+        require(katalog.moznaWybrac(id, rodzaj)) {
+            "Wybrany model jest teraz niedostępny do tego zadania. Wybierz inny model lub Automatycznie."
+        }
+    }
+
+    fun napiszOpisAi(zdjecie: Uri?, dane: DaneOpisuAi, gotowe: (OpisAi) -> Unit) {
+        if (_stan.value.agentPracuje) return
+        _stan.update { it.copy(agentPracuje = true, blad = null, komunikat = "Układam opis po polsku…") }
+        viewModelScope.launch {
+            try {
+                val adres = adresRoboczy()
+                sprawdzModelAi(adres, dane.model, "tekst")
+                val tylkoSlowa = zdjecie != null && dane.model != "auto" &&
+                    _stan.value.katalogAi.dla("tekst").firstOrNull { it.id == dane.model }?.vision == false
+                require(!tylkoSlowa || dane.maFakty()) {
+                    "Ten model nie odczytuje zdjęć. Dopisz kilka słów lub wybierz model, który odczytuje zdjęcia."
+                }
+                val opis = repozytorium.opisAi(adres, if (tylkoSlowa) null else zdjecie, dane)
+                gotowe(if (tylkoSlowa) opis.copy(ostrzezenie = listOf("Ten model ułożył opis tylko z podanych słów. Nie oglądał zdjęcia.",
+                    opis.ostrzezenie.orEmpty()).filter { it.isNotBlank() }.joinToString(" ")) else opis)
+                _stan.update { it.copy(propozycjaAgenta = SzkicProduktu(
+                    nazwa = opis.nazwa, opisKrotki = opis.opisKrotki, opis = opis.opis,
+                    kategoria = opis.kategoria ?: "inne", doUzupelnienia = opis.doUzupelnienia,
+                )) }
+                dopiszCzynnosc("Propozycja opisu", opis.model, "Do sprawdzenia")
+                _stan.update { it.copy(komunikat = "Opis gotowy. Sprawdź, czy zgadza się z wyrobem.") }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _stan.update { it.copy(blad = if (e is retrofit2.HttpException)
+                    "Serwer nie przygotował opisu. Sprawdź połączenie i obsługę asystenta w warsztacie."
+                    else if (e is java.io.IOException) "Brak połączenia z warsztatem. Twoje słowa pozostały w szkicu. Spróbuj ponownie."
+                    else e.message ?: "Opis nie powstał. Spróbuj ponownie.") }
+            } finally {
+                _stan.update { it.copy(agentPracuje = false) }
+            }
+        }
+    }
+
     //
     // Zapis idzie z opoznieniem, nie po kazdej literze: DataStore pisze na dysk,
     // a kreator ma kilkanascie pol. Sekunda ciszy w pisaniu to naturalny moment
     // na zapis i nie widac go na ekranie.
 
     private var zapisKopii: kotlinx.coroutines.Job? = null
+    // Zapis szkicu kończy się również po zamknięciu Activity.
+    private val zakresZapisu = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
 
     fun ustawAktywnyKreator(id: Int) {
         viewModelScope.launch {
@@ -220,17 +304,34 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
     }
 
     fun zapiszKopie(kopia: KopiaRobocza) {
-        if (kopia.pusta) return
+        if (kopia.pusta && kopia.id == 0 && !_stan.value.kopieRobocze.containsKey(0)) return
+        val poprzedni = zapisKopii
         zapisKopii?.cancel()
-        zapisKopii = viewModelScope.launch {
+        zapisKopii = zakresZapisu.launch {
+            poprzedni?.join()
             delay(500)
+            try {
             ustawienia.zapiszKopie(
                 kopia.copy(
                     zdjecie = zachowajZdjecie(kopia.id, kopia.zdjecie),
+                    dodatkoweKadry = kopia.dodatkoweKadry.map { zachowajZdjecie(kopia.id, it) },
+                    animacja = zachowajZdjecie(kopia.id, kopia.animacja),
                     zapisano = System.currentTimeMillis(),
                 )
             )
-            ustawienia.zapiszAktywnyKreatorId(kopia.id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _stan.update { it.copy(blad = "Nie udało się zachować szkicu na telefonie. Sprawdź wolne miejsce i spróbuj ponownie.") }
+            }
+        }
+    }
+
+    fun zachowajIZamknij(gotowe: () -> Unit) {
+        viewModelScope.launch {
+            zapisKopii?.join()
+            ustawienia.zapiszAktywnyKreatorId(-1)
+            gotowe()
         }
     }
 
@@ -246,32 +347,45 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
         withContext(Dispatchers.IO) {
             if (zrodlo.isBlank()) return@withContext ""
             val katalog = java.io.File(getApplication<Application>().filesDir, "kopie")
-            if (zrodlo.startsWith(katalog.absolutePath)) return@withContext zrodlo
+            val uri = if (zrodlo.startsWith("/")) Uri.fromFile(java.io.File(zrodlo)) else Uri.parse(zrodlo)
+            if (uri.scheme == "file") {
+                val lokalny = java.io.File(uri.path.orEmpty())
+                val prywatny = getApplication<Application>().filesDir.canonicalPath + java.io.File.separator
+                if (lokalny.exists() && lokalny.canonicalPath.startsWith(prywatny)) return@withContext lokalny.absolutePath
+            }
 
             runCatching {
                 katalog.mkdirs()
-                val cel = java.io.File(katalog, "kopia_$id.jpg")
+                val rozszerzenie = uri.lastPathSegment?.substringAfterLast('.', "jpg")
+                    ?.takeIf { it in listOf("jpg", "jpeg", "png", "webp", "gif", "mp4", "webm", "mov") } ?: "jpg"
+                val cel = java.io.File.createTempFile("kopia_${id}_", ".$rozszerzenie", katalog)
                 getApplication<Application>().contentResolver
-                    .openInputStream(android.net.Uri.parse(zrodlo))!!
+                    .openInputStream(uri)!!
                     .use { we -> cel.outputStream().use { wy -> we.copyTo(wy) } }
                 cel.absolutePath
-            }.getOrDefault("")
+            }.getOrDefault(zrodlo)
         }
 
     /** Po udanym zapisie na serwer kopia nie ma juz czego pilnowac. */
     fun skasujKopie(id: Int) {
+        viewModelScope.launch { usunKopiePoZapisie(id) }
+    }
+
+    private suspend fun usunKopiePoZapisie(id: Int) {
         zapisKopii?.cancel()
-        viewModelScope.launch {
-            // Plik zdjecia idzie razem z wpisem — inaczej katalog `kopie`
-            // rosnie w nieskonczonosc po kazdym porzuconym szkicu.
-            _stan.value.kopieRobocze[id]?.zdjecie?.takeIf { it.isNotBlank() }?.let {
-                runCatching { java.io.File(it).delete() }
-            }
-            ustawienia.skasujKopie(id)
-            if (_stan.value.aktywnyKreatorId == id) {
-                ustawienia.zapiszAktywnyKreatorId(-1)
+        zapisKopii?.join()
+        _stan.value.kopieRobocze[id]?.zdjecie?.takeIf { it.isNotBlank() }?.let { sciezka ->
+            runCatching {
+                val plik = java.io.File(sciezka)
+                val katalog = java.io.File(getApplication<Application>().filesDir, "kopie").canonicalPath + java.io.File.separator
+                val wspoldzielony = _stan.value.kopieRobocze.any { (innyId, kopia) -> innyId != id &&
+                    (kopia.zdjecie == sciezka || sciezka in kopia.dodatkoweKadry || kopia.animacja == sciezka) }
+                if (plik.canonicalPath.startsWith(katalog) && !wspoldzielony) plik.delete()
             }
         }
+        ustawienia.skasujKopie(id)
+        _stan.update { it.copy(kopieRobocze = it.kopieRobocze - id) }
+        if (_stan.value.aktywnyKreatorId == id) ustawienia.zapiszAktywnyKreatorId(-1)
     }
 
     fun zbadajCeneRynkowa(
@@ -279,15 +393,25 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
         kategoria: String = "",
         naWynik: (Double, Double, Double, Double) -> Unit = { _, _, _, _ -> }
     ) {
-        if (fraza.isBlank()) return
+        if (fraza.isBlank() || _stan.value.badanieCenyWToku) return
         viewModelScope.launch {
-            _stan.update { it.copy(badanieCenyWToku = true, komunikat = "Sprawdzam ceny na Allegro...") }
+            _stan.update { it.copy(badanieCenyWToku = true, komunikat = "Sprawdzam ceny na Allegro...",
+                bladWyceny = null, sugerowanaCenaRynkowa = null, sugerowanaCenaAllegro = null,
+                minCenaRynkowa = null, maxCenaRynkowa = null, ofertyRynkowe = emptyList(),
+                wycenaZmierzona = false, ostrzezenieWyceny = null) }
             try {
                 val adres = adresRoboczy()
                 val wynik = repozytorium.zbadajCeneRynkowa(adres, fraza, kategoria)
                 when (wynik) {
                     is Wynik.Jest -> {
                         val odp = wynik.dane
+                        if (!odp.zmierzoneNaRynku) {
+                            val powod = listOfNotNull(odp.blad?.takeIf { it.isNotBlank() }, odp.ostrzezenie?.takeIf { it.isNotBlank() })
+                                .distinct().joinToString(" ").ifBlank { "Nie potwierdzono cen rzeczywistych ofert. Nie stosujemy szacunku." } +
+                                " Wpisz cenę ręcznie. Twoja dotychczasowa cena nie została zmieniona."
+                            _stan.update { it.copy(badanieCenyWToku = false, bladWyceny = powod, blad = powod) }
+                            return@launch
+                        }
                         _stan.update {
                             it.copy(
                                 badanieCenyWToku = false,
@@ -298,16 +422,10 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                                 ofertyRynkowe = odp.znalezione,
                                 wycenaZmierzona = odp.zmierzoneNaRynku,
                                 ostrzezenieWyceny = odp.ostrzezenie.takeIf { _ -> !odp.zmierzoneNaRynku },
-                                komunikat = if (odp.zmierzoneNaRynku) {
+                                komunikat =
                                     "Mediana z ${odp.liczbaOfert} ofert Allegro: " +
                                         "${odp.sugerowanaCena.toInt()} zł " +
-                                        "(na Allegro wystaw ${odp.sugerowanaAllegro.toInt()} zł)"
-                                } else {
-                                    // Bez slowa „szacunek" w tresci komunikat wyglada
-                                    // identycznie jak zmierzona cena — a nia nie jest.
-                                    "SZACUNEK, nie cena rynkowa: ok. " +
-                                        "${odp.sugerowanaCena.toInt()} zł — sprawdź sama na Allegro"
-                                }
+                                        "— sprawdź porównywalność wyrobów przed zastosowaniem ceny."
                             )
                         }
                         naWynik(odp.sugerowanaCena, odp.sugerowanaAllegro, odp.minCena, odp.maxCena)
@@ -316,14 +434,41 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                         _stan.update {
                             it.copy(
                                 badanieCenyWToku = false,
+                                bladWyceny = "Nie udało się sprawdzić cen: ${wynik.komunikat}. Spróbuj ponownie później.",
                                 blad = "Błąd badania cen: ${wynik.komunikat}"
                             )
                         }
                     }
                 }
             } catch (e: Exception) {
-                _stan.update { it.copy(badanieCenyWToku = false, blad = "Błąd połączenia: ${e.message}") }
+                _stan.update { it.copy(badanieCenyWToku = false, bladWyceny = "Nie udało się połączyć podczas sprawdzania cen. Spróbuj ponownie później.", blad = "Błąd połączenia: ${e.message}") }
             }
+        }
+    }
+
+    fun znajdzKategorieAllegro(fraza: String) {
+        if (_stan.value.wyszukiwanieKategorii.wToku) return
+        val szukana = fraza.trim()
+        if (szukana.length !in 2..100) {
+            _stan.update { it.copy(wyszukiwanieKategorii = StanWyszukiwaniaKategorii(fraza = szukana, sprawdzono = true,
+                blad = "Wpisz od 2 do 100 znaków nazwy wyrobu.")) }
+            return
+        }
+        _stan.update { it.copy(wyszukiwanieKategorii = StanWyszukiwaniaKategorii(fraza = szukana, wToku = true)) }
+        viewModelScope.launch {
+            val wynik = try {
+                repozytorium.kategorieAllegro(adresRoboczy(), szukana)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Wynik.Blad("Nie udało się połączyć z warsztatem. Spróbuj ponownie.")
+            }
+            val nowy = when (wynik) {
+                is Wynik.Jest -> StanWyszukiwaniaKategorii(fraza = szukana, sprawdzono = true, kategorie = wynik.dane)
+                is Wynik.Blad -> StanWyszukiwaniaKategorii(fraza = szukana, sprawdzono = true,
+                    blad = "Nie udało się znaleźć kategorii: ${wynik.komunikat} Możesz zmienić nazwę i spróbować ponownie.")
+            }
+            _stan.update { it.copy(wyszukiwanieKategorii = nowy) }
         }
     }
 
@@ -336,6 +481,7 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
         stanSztuk: Int = 1,
         naKoniec: (Boolean, String?) -> Unit = { _, _ -> }
     ) {
+        if (_stan.value.ladowanie) return
         viewModelScope.launch {
             _stan.update { it.copy(ladowanie = true, komunikat = "Tworzę prywatny szkic na Allegro...") }
             try {
@@ -352,13 +498,20 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 when (wynik) {
                     is Wynik.Jest -> {
                         val odp = wynik.dane
+                        val bladSzkicu = odp.bladPrywatnegoSzkicu()
+                        if (bladSzkicu != null) {
+                            _stan.update { it.copy(ladowanie = false, blad = bladSzkicu, komunikat = null) }
+                            naKoniec(false, null)
+                            return@launch
+                        }
                         _stan.update {
                             it.copy(
                                 ladowanie = false,
                                 komunikat = "Utworzono prywatny szkic na Allegro!"
                             )
                         }
-                        naKoniec(true, odp.url)
+                        naKoniec(true, odp.url?.takeIf { it.isNotBlank() }
+                            ?: odp.id?.takeIf { it.all(Char::isDigit) }?.let { "https://allegro.pl/oferta/$it" })
                     }
                     is Wynik.Blad -> {
                         _stan.update {
@@ -740,7 +893,17 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
         opis: String,
         proporcje: String,
         gotowe: (Uri) -> Unit,
+    ) = zlecModelem(zadanie, zdjecie, opis, proporcje, "", gotowe)
+
+    fun zlecModelem(
+        zadanie: String,
+        zdjecie: Uri,
+        opis: String,
+        proporcje: String,
+        model: String,
+        gotowe: (Uri) -> Unit,
     ) {
+        if (_stan.value.agentPracuje) return
         if (_stan.value.adresWarsztatu.isBlank()) {
             _stan.update { it.copy(blad = "Brak adresu serwera warsztatowego. Ustaw go w Pomocy.") }
             return
@@ -752,11 +915,13 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 // ostatniego odpytania kontrolki — inaczej robota idzie jedna siecia,
                 // a pytanie o wynik druga.
                 val adres = adresRoboczy()
+                sprawdzModelAi(adres, model, if (zadanie.startsWith("animacja")) "wideo" else "obraz")
                 val w = repozytorium.zlecWarsztatowi(
                     adres, zadanie, zdjecie, opis, proporcje,
                     // Gdy sieć padnie w trakcie liczenia, repozytorium pyta stąd
                     // o adres jeszcze raz — po zmianie Wi-Fi bywa już inny.
                     odswiezAdres = { adresRoboczy() },
+                    model = model,
                 ) { etap -> _stan.update { it.copy(komunikat = "Komputer: $etap") } }
                 val nazwaZadania = when (zadanie) {
                     "animacja" -> "Animacja (karta)"
@@ -777,11 +942,11 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                         gotowe(Uri.fromFile(w.dane))
                         dopiszCzynnosc(
                             co = nazwaZadania,
-                            silnik = "komputer w warsztacie",
+                            silnik = model,
                             wynik = w.dane.name,
                             plik = w.dane.absolutePath,
                         )
-                        _stan.update { it.copy(komunikat = "Gotowe — zapisano w galerii i w szkicu") }
+                        _stan.update { it.copy(komunikat = "Gotowe — wynik zapisano w galerii. Sprawdź go i zdecyduj, czy użyć w produkcie.") }
                     }
                     is Wynik.Blad -> {
                         dopiszCzynnosc(nazwaZadania, "komputer w warsztacie", w.komunikat.take(90), udana = false)
@@ -807,6 +972,8 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
         wybranySilnik: String = "meta",
         gotoweZdjecie: (Uri) -> Unit,
         gotowaAnimacja: (Uri) -> Unit,
+        modelObrazu: String = "auto",
+        modelWideo: String = "auto",
     ) {
         val dopisek = dodatkowe.trim().take(300)
 
@@ -827,8 +994,10 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
 
         viewModelScope.launch {
             _stan.update { it.copy(agentPracuje = true, komunikat = "Krok 1 z 3: wycinam tło...") }
-            val adres = adresRoboczy()
             try {
+            val adres = adresRoboczy()
+            sprawdzModelAi(adres, modelObrazu, "obraz")
+            sprawdzModelAi(adres, modelWideo, "wideo")
 
             // --- krok 1: tło
             val silnikTla = wybranySilnik
@@ -838,10 +1007,11 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 "copilot" -> "zdjecie-copilot"
                 "gemini" -> "zdjecie-gemini"
                 "forge" -> "zdjecie-produktowe"
-                else -> "zdjecie-meta"
+                else -> "zdjecie-produktowe"
             }
             val poTle = repozytorium.zlecWarsztatowi(
                 adres, zadanieTla, zdjecie, zDopiskiem(Polecenia.tlo(coTo)), proporcje,
+                model = modelObrazu,
             ) { etap -> _stan.update { it.copy(komunikat = "Krok 1 z 3 (tło): $etap") } }
 
             val kadrBezTla = when (poTle) {
@@ -864,10 +1034,11 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 "copilot" -> "zdjecie-copilot"
                 "gemini" -> "zdjecie-gemini"
                 "forge" -> "zdjecie-produktowe"
-                else -> "zdjecie-meta"
+                else -> "zdjecie-produktowe"
             }
             val poSwietle = repozytorium.zlecWarsztatowi(
                 adres, zadanieSwiatla, kadrBezTla, zDopiskiem(Polecenia.upieksz(coTo)), proporcje,
+                model = modelObrazu,
             ) { etap -> _stan.update { it.copy(komunikat = "Krok 2 z 3 (światło): $etap") } }
 
             val kadrGotowy = when (poSwietle) {
@@ -904,10 +1075,11 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 "flow" -> "animacja-flow"
                 "gemini" -> "animacja-gemini"
                 "forge", "comfy" -> "animacja"
-                else -> "animacja-meta"
+                else -> "animacja"
             }
             val poRuchu = repozytorium.zlecWarsztatowi(
                 adres, zadanieRuchu, kadrGotowy, zDopiskiem(Polecenia.obrot(coTo)), proporcje,
+                model = modelWideo,
             ) { etap -> _stan.update { it.copy(komunikat = "Krok 3 z 3 (animacja): $etap") } }
 
             when (poRuchu) {
@@ -930,6 +1102,10 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                     _stan.update { it.copy(blad = poRuchu.komunikat) }
                 }
             }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _stan.update { it.copy(blad = "Nie udało się wykonać całego ciągu. Sprawdź modele i połączenie z warsztatem.") }
             } finally {
                 _stan.update { it.copy(agentPracuje = false) }
             }
@@ -1215,7 +1391,7 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
             is Wynik.Jest -> {
                 _stan.update { it.copy(komunikat = "Zapisano „${produkt.nazwa}”") }
                 naucSie(produkt, cenaZl)
-                skasujKopie(produkt.id)
+                usunKopiePoZapisie(produkt.id)
                 odswiezProdukty()
                 poZapisie(w.dane.id)
             }
@@ -1247,13 +1423,18 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
         dodatkoweZdjecia: List<Uri> = emptyList(),
         animacja: Uri? = null,
         altZdjecia: String,
+        poCzesciowymZapisie: (Int) -> Unit = {},
         poZapisie: (Int) -> Unit = {},
     ) = wKtorymsMomencie {
+        zapisKopii?.join()
         when (val w = repozytorium.zapisz(produkt, cenaZl, cenaPromoZl)) {
             is Wynik.Jest -> {
                 val id = w.dane.id
                 naucSie(produkt, cenaZl)
-                skasujKopie(produkt.id)
+                val brakujace = mutableListOf<String>()
+                val brakujaceZdjecia = mutableListOf<Uri>()
+                var brakGlownego = false
+                var brakAnimacji = false
 
                 // 1. Animacja GIF / Wideo na pozycji 0 (pierwsze w sklepie)
                 if (animacja != null) {
@@ -1262,6 +1443,8 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                     val opis = if (jestWideo) "Wideo obrotowe produktu" else "Animacja 360° produktu"
                     val wynikPliku = repozytorium.wgrajPlikProduktu(id, animacja, opis, pozycja = 0)
                     if (wynikPliku is Wynik.Blad) {
+                        brakAnimacji = true
+                        brakujace.add("film lub animacja")
                         _stan.update { it.copy(blad = "Błąd wysyłania animacji: ${wynikPliku.komunikat}") }
                     }
                 }
@@ -1270,6 +1453,8 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 if (glowneZdjecie != null) {
                     val z = repozytorium.wgrajZdjecie(id, glowneZdjecie, altZdjecia, 100)
                     if (z is Wynik.Blad) {
+                        brakGlownego = true
+                        brakujace.add("zdjęcie główne")
                         _stan.update { it.copy(blad = "Błąd wysyłania zdjęcia głównego: ${z.komunikat}") }
                     }
                 }
@@ -1278,10 +1463,36 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                 dodatkoweZdjecia.forEachIndexed { idx, kadr ->
                     val z = repozytorium.wgrajZdjecie(id, kadr, "$altZdjecia - kadr ${idx + 2}", 110 + (idx * 10))
                     if (z is Wynik.Blad) {
+                        brakujaceZdjecia.add(kadr)
+                        brakujace.add("zdjęcie nr ${idx + 2}")
                         _stan.update { it.copy(blad = "Błąd wysyłania zdjęcia #${idx + 2}: ${z.komunikat}") }
                     }
                 }
 
+                if (brakujace.isNotEmpty()) {
+                    zapisKopii?.cancel()
+                    zapisKopii?.join()
+                    val kopia = (_stan.value.kopieRobocze[produkt.id] ?: KopiaRobocza(
+                        nazwa = produkt.nazwa, opis = produkt.opis, opisKrotki = produkt.opisKrotki, cena = cenaZl,
+                    )).copy(
+                        id = id, status = produkt.status,
+                        zdjecie = if (brakGlownego) zachowajZdjecie(id, glowneZdjecie.toString()) else "",
+                        dodatkoweKadry = brakujaceZdjecia.map { zachowajZdjecie(id, it.toString()) },
+                        animacja = if (brakAnimacji) zachowajZdjecie(id, animacja.toString()) else "",
+                    )
+                    ustawienia.zapiszKopie(kopia)
+                    if (produkt.id != id) ustawienia.skasujKopie(produkt.id)
+                    _stan.update { it.copy(
+                        kopieRobocze = (it.kopieRobocze - produkt.id) + (id to kopia),
+                        blad = "Dane produktu zapisano. Nie wysłano: ${brakujace.joinToString()}. Materiały są w kopii roboczej. Spróbuj zapisać ponownie.",
+                        komunikat = null,
+                    ) }
+                    odswiezProdukty()
+                    poCzesciowymZapisie(id)
+                    return@wKtorymsMomencie
+                }
+                // Dopiero teraz zdjęcia są na serwerze — można usunąć kopię.
+                usunKopiePoZapisie(produkt.id)
                 _stan.update { it.copy(komunikat = "Zapisano „${produkt.nazwa}” i zaktualizowano w sklepie!") }
                 val chmuraCfg = _stan.value.chmura
                 if (chmuraCfg.gotowa) {
@@ -1506,8 +1717,15 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
     private fun wKtorymsMomencie(blok: suspend () -> Unit) {
         viewModelScope.launch {
             _stan.update { it.copy(ladowanie = true) }
-            blok()
-            _stan.update { it.copy(ladowanie = false) }
+            try {
+                blok()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _stan.update { it.copy(blad = "Nie udało się zakończyć operacji. Sprawdź połączenie i spróbuj ponownie.") }
+            } finally {
+                _stan.update { it.copy(ladowanie = false) }
+            }
         }
     }
 }

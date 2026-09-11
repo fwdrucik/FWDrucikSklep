@@ -35,6 +35,20 @@ class Repozytorium(
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    suspend fun modeleAi(adres: String) = pl.fwdrucik.sklep.siec.AiWarsztatu(warsztat).modele(adres)
+
+    suspend fun opisAi(adres: String, zdjecie: Uri?, dane: pl.fwdrucik.sklep.siec.DaneOpisuAi): pl.fwdrucik.sklep.siec.OpisAi {
+        val plik = zdjecie?.let { uri ->
+            withContext(Dispatchers.IO) {
+                val bytes = kontekst.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: throw IOException("Nie można odczytać zdjęcia. Wybierz je ponownie.")
+                val typ = kontekst.contentResolver.getType(uri) ?: "image/jpeg"
+                MultipartBody.Part.createFormData("plik", "wyrob", bytes.toRequestBody(typ.toMediaType()))
+            }
+        }
+        return pl.fwdrucik.sklep.siec.AiWarsztatu(warsztat).opis(adres, dane, plik)
+    }
+
     fun czyZalogowany(): Boolean = sloj.czyZalogowany()
 
     suspend fun zaloguj(login: String, haslo: String): Wynik<Uzytkownik> = wywolaj {
@@ -316,6 +330,7 @@ class Repozytorium(
          * trzeba by przepisywac.
          */
         odswiezAdres: (suspend () -> String)? = null,
+        model: String = "",
         postep: (String) -> Unit = {},
     ): Wynik<File> = wywolaj {
         val plikWejsciowy = withContext(Dispatchers.IO) {
@@ -350,6 +365,7 @@ class Repozytorium(
                             if (proporcje in listOf("16:9", "9:16", "1:1")) proporcje else "16:9"
                         ),
                         plik = czesc,
+                        model = model.takeIf { it.isNotBlank() }?.let(::pole),
                     )
                     if (z.ok && z.id.isNotBlank()) {
                         zlecenie = z
@@ -427,6 +443,9 @@ class Repozytorium(
                 kategoria = kategoria
             )
         }
+
+    suspend fun kategorieAllegro(adres: String, fraza: String): Wynik<List<pl.fwdrucik.sklep.siec.KategoriaAllegro>> =
+        wywolaj { pl.fwdrucik.sklep.siec.KategorieWarsztatu(warsztat).szukaj(adres, fraza) }
 
     suspend fun utworzSzkicAllegro(
         adres: String,

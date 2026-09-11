@@ -15,6 +15,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -51,9 +54,10 @@ private fun KreatorZawartosc(
     val model: ModelSklepu = viewModel()
     val stan by model.stan.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
+    var aktywneId by rememberSaveable { mutableIntStateOf(idProduktu) }
 
-    LaunchedEffect(Unit) {
-        model.ustawAktywnyKreator(idProduktu)
+    LaunchedEffect(aktywneId) {
+        model.ustawAktywnyKreator(aktywneId)
     }
 
     LaunchedEffect(stan.blad, stan.komunikat) {
@@ -72,10 +76,16 @@ private fun KreatorZawartosc(
                 .fillMaxSize()
                 .padding(odstepy)
         ) {
-            val istniejacy = if (idProduktu > 0) stan.produkty.firstOrNull { it.id == idProduktu } else null
-            if (idProduktu > 0 && istniejacy == null && (stan.ladowanie || stan.produkty.isEmpty())) {
+            val istniejacy = if (aktywneId > 0) stan.produkty.firstOrNull { it.id == aktywneId } else null
+            if (!stan.kopieWczytane || (aktywneId > 0 && istniejacy == null && stan.ladowanie)) {
                 Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
                     androidx.compose.material3.CircularProgressIndicator()
+                }
+            } else if (aktywneId > 0 && istniejacy == null) {
+                androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth()) {
+                    androidx.compose.material3.Text("Nie udało się wczytać produktu. Sprawdź połączenie i spróbuj ponownie.")
+                    androidx.compose.material3.Button(onClick = model::odswiez) { androidx.compose.material3.Text("Wczytaj ponownie") }
+                    androidx.compose.material3.TextButton(onClick = { model.zachowajIZamknij(naZamknij) }) { androidx.compose.material3.Text("Wróć do produktów") }
                 }
             } else {
                 if (stan.ladowanie) {
@@ -84,9 +94,23 @@ private fun KreatorZawartosc(
 
                 EkranKreatora(
                     istniejacy = istniejacy,
-                    agentPracuje = stan.agentPracuje,
+                    agentPracuje = stan.agentPracuje || stan.ladowanie,
+                    postepPracy = stan.komunikat,
+                    bladPracy = stan.blad,
+                    bladWyceny = stan.bladWyceny,
+                    wyszukiwanieKategorii = stan.wyszukiwanieKategorii,
+                    naSzukajKategorii = model::znajdzKategorieAllegro,
+                    katalogAi = stan.katalogAi,
+                    katalogAiWToku = stan.katalogWToku,
+                    bladKataloguAi = stan.bladKatalogu,
+                    naOdswiezModeleAi = model::odswiezKatalogAi,
+                    naOpisAi = model::napiszOpisAi,
+                    naZlecModelem = model::zlecModelem,
+                    naCiagModelami = { foto, tekst, proporcje, dodatkowe, obraz, wideo, poZdjeciu, poFilmie ->
+                        model.ciagAutomatyczny(foto, tekst, proporcje, dodatkowe, "auto", poZdjeciu, poFilmie, obraz, wideo)
+                    },
                     maKluczGemini = stan.kluczGemini.isNotBlank(),
-                    kopia = stan.kopieRobocze[if (idProduktu > 0) idProduktu else 0],
+                    kopia = stan.kopieRobocze[aktywneId],
                     naZapiszKopie = model::zapiszKopie,
                     naOdrzucKopie = model::skasujKopie,
                     naOpiszZeZdjecia = model::opiszZeZdjecia,
@@ -105,7 +129,9 @@ private fun KreatorZawartosc(
                     silnikAnimacji = model.silnikDo("animacja"),
                     czynnosci = stan.czynnosci,
                     naZapisz = { produkt, cena, promo, zdjecie, dodatkowe, animacja, alt ->
-                        model.zapiszZeZdjeciami(produkt, cena, promo, zdjecie, dodatkowe, animacja, alt) { _ ->
+                        model.zapiszZeZdjeciami(produkt, cena, promo, zdjecie, dodatkowe, animacja, alt,
+                            poCzesciowymZapisie = { aktywneId = it },
+                        ) { _ ->
                             model.zamknijKreator()
                             naZamknij()
                         }
@@ -113,7 +139,9 @@ private fun KreatorZawartosc(
                     warsztatGotowy = stan.swiatloWarsztatu in listOf("zielony", "zolty", "czerwony"),
                     naZlecWarsztatowi = model::zlecWarsztatowi,
                     naWgrajPlik = model::wgrajPlikDoOgloszenia,
-                    naCiagAuto = model::ciagAutomatyczny,
+                    naCiagAuto = { foto, tekst, proporcje, dodatkowe, silnik, poZdjeciu, poFilmie ->
+                        model.ciagAutomatyczny(foto, tekst, proporcje, dodatkowe, silnik, poZdjeciu, poFilmie)
+                    },
                     naWgrajZdjecie = model::wgrajZdjecie,
                     naUsunZdjecie = model::usunZdjecie,
                     naPobierzZdjecieProduktu = model::pobierzZdjecieProduktu,
@@ -130,8 +158,7 @@ private fun KreatorZawartosc(
                         }
                     },
                     naWyjscie = {
-                        model.zamknijKreator()
-                        naZamknij()
+                        model.zachowajIZamknij(naZamknij)
                     },
                     badanieCenyWToku = stan.badanieCenyWToku,
                     sugerowanaCenaRynkowa = stan.sugerowanaCenaRynkowa,

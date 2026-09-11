@@ -200,15 +200,42 @@ data class KopiaRobocza(
     val allegroCena: String = "",
     val allegroId: String = "",
     val allegroStatus: String = "brak",
+    /** null: stara kopia bez tego pola; pusty tekst: świadomie wyczyszczone. */
+    val allegroKategoria: String? = null,
+    val allegroKategoriaNazwa: String = "",
+    val allegroKategoriaSciezka: String = "",
     val sugerowanaCenaRynkowa: String = "",
     val sugerowanaCenaAllegro: String = "",
     val zakresCen: String = "",
+    val trybProsty: Boolean = true,
+    val krokAsystenta: Int = 1,
+    val material: String = "",
+    val wymiary: String = "",
+    val modelTekstuAi: String = "auto",
+    val modelObrazuAi: String = "auto",
+    val modelWideoAi: String = "auto",
+    val doUzupelnienia: List<String> = emptyList(),
+    val zrodloOpisu: String = "",
+    val ostrzezenieOpisu: String = "",
     /** Kiedy zapisana — millisekundy, do pokazania godziny na banerze i limitu 24h. */
     val zapisano: Long = 0,
 ) {
     /** Pusta kopia nie ma czego przywracac — nie zawracamy nia glowy. */
     val pusta: Boolean
-        get() = listOf(nazwa, opisKrotki, opis, cena, notatka, zdjecie, animacja).all { it.isBlank() } && dodatkoweKadry.isEmpty()
+        get() = listOf(nazwa, opisKrotki, opis, cena, notatka, zdjecie, animacja,
+            material, wymiary, cenaPromo, stan, waga, czas, allegroUrl, allegroId,
+            allegroKategoria.orEmpty()).all { it.isBlank() } && dodatkoweKadry.isEmpty()
+
+    /** Także puste pola są świadomą zmianą. Nie zastępuj ich danymi z serwera. */
+    fun naProdukt(baza: Produkt): Produkt = baza.copy(
+        nazwa = nazwa, kategoria = kategoria.ifBlank { "inne" }, opisKrotki = opisKrotki, opis = opis,
+        cenaGr = zloteNaGrosze(cena) ?: 0, cenaPromoGr = zloteNaGrosze(cenaPromo),
+        stan = stan.toIntOrNull(), jednostka = jednostka.ifBlank { "szt." }, wagaG = waga.toIntOrNull() ?: 0,
+        czasRealizacji = czas, status = status, pozycja = pozycja.toIntOrNull() ?: 100,
+        allegroUrl = allegroUrl.ifBlank { null }, allegroId = allegroId.ifBlank { null },
+        allegroCenaGr = zloteNaGrosze(allegroCena), allegroStatus = allegroStatus,
+        allegroKategoria = if (allegroKategoria == null) baza.allegroKategoria else allegroKategoria.ifBlank { null },
+    )
 }
 
 /** Statusy przepisane z FW_STATUSY_* w api/_sklep.php. */

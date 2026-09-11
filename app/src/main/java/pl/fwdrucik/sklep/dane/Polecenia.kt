@@ -15,6 +15,11 @@ package pl.fwdrucik.sklep.dane
  */
 object Polecenia {
 
+    /** Jedno zlecenie z Prostego: bez sprzecznego polecenia zachowania starego tła. */
+    fun tloISwiatlo(coTo: String): String = tlo(coTo) +
+        ", popraw światło, ostrość i kontrast, wyrównaj ekspozycję, " +
+        "zachowaj rzeczywisty kolor przedmiotu i nie dodawaj szczegółów wyrobu"
+
     /**
      * Ozdoby tła losowane przy każdym zleceniu.
      *

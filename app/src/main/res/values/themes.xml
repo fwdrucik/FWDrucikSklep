@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.FWDrucikSklep" parent="android:Theme.Material.NoActionBar">
+    <style name="Theme.FWDrucikSklep.Base" parent="android:Theme.Material.NoActionBar">
         <!-- Tlo okna musi byc ciemne od pierwszej klatki, zanim Compose zdazy
              cokolwiek narysowac — inaczej przy starcie mrugalo bialym. -->
         <item name="android:windowBackground">#0B0D10</item>
@@ -8,6 +8,6 @@
         <item name="android:statusBarColor">#0B0D10</item>
         <item name="android:navigationBarColor">#0B0D10</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
     </style>
+    <style name="Theme.FWDrucikSklep" parent="Theme.FWDrucikSklep.Base" />
 </resources>

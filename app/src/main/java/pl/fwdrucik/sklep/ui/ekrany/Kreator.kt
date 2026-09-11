@@ -74,10 +74,13 @@ import pl.fwdrucik.sklep.dane.Produkt
 import pl.fwdrucik.sklep.dane.Statusy
 import pl.fwdrucik.sklep.dane.SzkicProduktu
 import pl.fwdrucik.sklep.dane.zloteNaGrosze
+import pl.fwdrucik.sklep.dane.brakiSzkicuAllegro
+import pl.fwdrucik.sklep.dane.cenaTylkoOdUzytkownika
 import pl.fwdrucik.sklep.pomoc.Aparat
 import pl.fwdrucik.sklep.pomoc.Podpowiedz
 import pl.fwdrucik.sklep.pomoc.Podpowiedzi
 import pl.fwdrucik.sklep.ui.groszeNaPole
+import pl.fwdrucik.sklep.siec.pytanieOBrakujacyFakt
 
 /**
  * Kreator produktu — zaczyna się od zdjęcia.
@@ -141,8 +144,31 @@ fun EkranKreatora(
     ofertyRynkowe: List<pl.fwdrucik.sklep.siec.OfertaCenowa> = emptyList(),
     naZbadajCeneRynkowa: ((String, String, (Double, Double, Double, Double) -> Unit) -> Unit)? = null,
     naUtworzSzkicAllegro: ((String, String, Double, String, String, Int, (Boolean, String?) -> Unit) -> Unit)? = null,
+    katalogAi: pl.fwdrucik.sklep.siec.KatalogAi = pl.fwdrucik.sklep.siec.KatalogAi(),
+    katalogAiWToku: Boolean = false,
+    bladKataloguAi: String? = null,
+    naOdswiezModeleAi: () -> Unit = {},
+    naOpisAi: (Uri?, pl.fwdrucik.sklep.siec.DaneOpisuAi, (pl.fwdrucik.sklep.siec.OpisAi) -> Unit) -> Unit = { _, _, _ -> },
+    naZlecModelem: (String, Uri, String, String, String, (Uri) -> Unit) -> Unit = { _, _, _, _, _, _ -> },
+    naCiagModelami: (Uri, String, String, String, String, String, (Uri) -> Unit, (Uri) -> Unit) -> Unit = { _, _, _, _, _, _, _, _ -> },
+    postepPracy: String? = null,
+    bladPracy: String? = null,
+    bladWyceny: String? = null,
+    wyszukiwanieKategorii: pl.fwdrucik.sklep.ui.StanWyszukiwaniaKategorii = pl.fwdrucik.sklep.ui.StanWyszukiwaniaKategorii(),
+    naSzukajKategorii: ((String) -> Unit)? = null,
 ) {
-    val p = istniejacy ?: Produkt()
+    val p = kopia?.naProdukt(istniejacy ?: Produkt()) ?: istniejacy ?: Produkt()
+    var trybProsty by rememberSaveable(p.id) { mutableStateOf(kopia?.trybProsty ?: true) }
+    var krokAsystenta by rememberSaveable(p.id) { mutableIntStateOf(kopia?.krokAsystenta ?: 1) }
+    var material by rememberSaveable(p.id) { mutableStateOf(kopia?.material.orEmpty()) }
+    var wymiary by rememberSaveable(p.id) { mutableStateOf(kopia?.wymiary.orEmpty()) }
+    var modelTekstuAi by rememberSaveable(p.id) { mutableStateOf(kopia?.modelTekstuAi ?: "auto") }
+    var modelObrazuAi by rememberSaveable(p.id) { mutableStateOf(kopia?.modelObrazuAi ?: "auto") }
+    var modelWideoAi by rememberSaveable(p.id) { mutableStateOf(kopia?.modelWideoAi ?: "auto") }
+    var zrodloOpisu by rememberSaveable(p.id) { mutableStateOf(kopia?.zrodloOpisu.orEmpty()) }
+    var ostrzezenieOpisu by rememberSaveable(p.id) { mutableStateOf(kopia?.ostrzezenieOpisu.orEmpty()) }
+    var propozycjaOpisu by remember { mutableStateOf<pl.fwdrucik.sklep.siec.OpisAi?>(null) }
+    LaunchedEffect(Unit) { naOdswiezModeleAi() }
 
     var nazwa by rememberSaveable(p.id) {
         mutableStateOf(if (p.nazwa.isNotBlank()) p.nazwa else kopia?.nazwa.orEmpty())
@@ -210,8 +236,19 @@ fun EkranKreatora(
     }
     var ostatnieWcisniecieWstecz by rememberSaveable { mutableLongStateOf(0L) }
     var tworzenieSzkicuWToku by remember { mutableStateOf(false) }
+    var allegroKategoria by rememberSaveable(p.id) { mutableStateOf(p.allegroKategoria.orEmpty()) }
+    var allegroKategoriaNazwa by rememberSaveable(p.id) { mutableStateOf(kopia?.allegroKategoriaNazwa.orEmpty()) }
+    var allegroKategoriaSciezka by rememberSaveable(p.id) { mutableStateOf(kopia?.allegroKategoriaSciezka.orEmpty()) }
+    var komunikatAllegro by rememberSaveable(p.id) { mutableStateOf<String?>(null) }
+    var zapytanieProstejWyceny by remember(p.id) { mutableStateOf("") }
 
-    LaunchedEffect(sugerowanaCenaRynkowa, sugerowanaCenaAllegro, minCenaRynkowa, maxCenaRynkowa) {
+    LaunchedEffect(sugerowanaCenaRynkowa, sugerowanaCenaAllegro, minCenaRynkowa, maxCenaRynkowa, wycenaZmierzona, badanieCenyWToku) {
+        if (!wycenaZmierzona || badanieCenyWToku) {
+            sugerowanaRynkowaStr = ""
+            sugerowanaAllegroStr = ""
+            zakresCenStr = ""
+            return@LaunchedEffect
+        }
         if (sugerowanaCenaRynkowa != null && sugerowanaCenaRynkowa > 0) {
             sugerowanaRynkowaStr = "%.2f".format(java.util.Locale.US, sugerowanaCenaRynkowa)
         }
@@ -273,7 +310,7 @@ fun EkranKreatora(
     // telefonie. Tekstu z kopii nadal NIE przywracamy sami: podmiana wpisanych
     // pol pod rekami byłaby gorsza niz utrata kopii. Ze zdjeciem jest inaczej,
     // bo puste miejsce nie ma czego nadpisac.
-    LaunchedEffect(p.id, kopia?.zdjecie, p.obrazy.firstOrNull()?.src) {
+    LaunchedEffect(p.id) {
         if (lokalneZdjecie != null) return@LaunchedEffect
 
         val zKopii = kopia?.zdjecie.orEmpty()
@@ -292,6 +329,7 @@ fun EkranKreatora(
     // Ktore zadanie czeka na wybor silnika. Pytamy w chwili klikniecia, bo to,
     // co akurat zyje i ile zostalo limitu, zmienia sie w ciagu dnia.
     var pytanieOSilnik by remember { mutableStateOf<String?>(null) }
+    var poprzedniePolaczenia by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
 
@@ -317,7 +355,7 @@ fun EkranKreatora(
             ).show()
         }
     }
-    var doUzupelnienia by remember(p.id) { mutableStateOf<List<String>>(emptyList()) }
+    var doUzupelnienia by rememberSaveable(p.id) { mutableStateOf(kopia?.doUzupelnienia ?: emptyList()) }
 
     // Pierwszy krok drogi „Zdjecie": co ma sie z nim stac. Silnik wybiera sie
     // dopiero potem, bo dopiero wtedy wiadomo, ktore silniki w ogole umieja
@@ -338,43 +376,7 @@ fun EkranKreatora(
         }
     }
 
-    // Automatyczne przywracanie stanu szkicu z kopii roboczej
-    LaunchedEffect(kopia) {
-        if (kopia != null && !kopia.pusta) {
-            if (nazwa.isBlank() && kopia.nazwa.isNotBlank()) nazwa = kopia.nazwa
-            if (opisKrotki.isBlank() && kopia.opisKrotki.isNotBlank()) opisKrotki = kopia.opisKrotki
-            if (opis.isBlank() && kopia.opis.isNotBlank()) opis = kopia.opis
-            if (kategoria.isBlank() && kopia.kategoria.isNotBlank()) kategoria = kopia.kategoria
-            if (cena.isBlank() && kopia.cena.isNotBlank()) cena = kopia.cena
-            if (cenaPromo.isBlank() && kopia.cenaPromo.isNotBlank()) cenaPromo = kopia.cenaPromo
-            if (stan.isBlank() && kopia.stan.isNotBlank()) stan = kopia.stan
-            if (jednostka.isBlank() && kopia.jednostka.isNotBlank()) jednostka = kopia.jednostka
-            if (waga.isBlank() && kopia.waga.isNotBlank()) waga = kopia.waga
-            if (czas.isBlank() && kopia.czas.isNotBlank()) czas = kopia.czas
-            if (notatka.isBlank() && kopia.notatka.isNotBlank()) notatka = kopia.notatka
-            if (opisZdjecia.isBlank() && kopia.opisZdjecia.isNotBlank()) opisZdjecia = kopia.opisZdjecia
-            if (lokalneZdjecie == null && kopia.zdjecie.isNotBlank() && java.io.File(kopia.zdjecie).exists()) {
-                lokalneZdjecie = Uri.fromFile(java.io.File(kopia.zdjecie))
-            }
-            if (dodatkoweKadry.isEmpty() && kopia.dodatkoweKadry.isNotEmpty()) {
-                kopia.dodatkoweKadry.forEach { path ->
-                    if (java.io.File(path).exists()) {
-                        dodatkoweKadry.add(Uri.fromFile(java.io.File(path)))
-                    }
-                }
-            }
-            if (animacja == null && kopia.animacja.isNotBlank() && java.io.File(kopia.animacja).exists()) {
-                animacja = Uri.fromFile(java.io.File(kopia.animacja))
-            }
-            if (allegroUrl.isBlank() && kopia.allegroUrl.isNotBlank()) allegroUrl = kopia.allegroUrl
-            if (allegroCena.isBlank() && kopia.allegroCena.isNotBlank()) allegroCena = kopia.allegroCena
-            if (allegroId.isBlank() && kopia.allegroId.isNotBlank()) allegroId = kopia.allegroId
-            if (allegroStatus == "brak" && kopia.allegroStatus.isNotBlank() && kopia.allegroStatus != "brak") allegroStatus = kopia.allegroStatus
-            if (sugerowanaRynkowaStr.isBlank() && kopia.sugerowanaCenaRynkowa.isNotBlank()) sugerowanaRynkowaStr = kopia.sugerowanaCenaRynkowa
-            if (sugerowanaAllegroStr.isBlank() && kopia.sugerowanaCenaAllegro.isNotBlank()) sugerowanaAllegroStr = kopia.sugerowanaCenaAllegro
-            if (zakresCenStr.isBlank() && kopia.zakresCen.isNotBlank()) zakresCenStr = kopia.zakresCen
-        }
-    }
+    // Kopia jest wczytana przed otwarciem kreatora, tylko raz. Puste pole może być celowe.
 
     // Pamiec robocza: kazda zmiana pola odklada sie sama, bez przycisku.
     val biezaca = KopiaRobocza(
@@ -383,24 +385,30 @@ fun EkranKreatora(
         cena = cena, cenaPromo = cenaPromo, stan = stan, jednostka = jednostka,
         waga = waga, czas = czas, status = status, pozycja = pozycja,
         notatka = notatka, opisZdjecia = opisZdjecia,
-        zdjecie = lokalneZdjecie?.path ?: lokalneZdjecie?.toString().orEmpty(),
-        dodatkoweKadry = dodatkoweKadry.mapNotNull { it.path ?: it.toString() },
-        animacja = animacja?.path ?: animacja?.toString().orEmpty(),
+        zdjecie = adresKopii(lokalneZdjecie),
+        dodatkoweKadry = dodatkoweKadry.map { adresKopii(it) },
+        animacja = adresKopii(animacja),
         sekcjaOtwarta = otwarta,
         allegroUrl = allegroUrl,
         allegroCena = allegroCena,
         allegroId = allegroId,
         allegroStatus = allegroStatus,
+        allegroKategoria = allegroKategoria,
+        allegroKategoriaNazwa = allegroKategoriaNazwa, allegroKategoriaSciezka = allegroKategoriaSciezka,
         sugerowanaCenaRynkowa = sugerowanaRynkowaStr,
         sugerowanaCenaAllegro = sugerowanaAllegroStr,
         zakresCen = zakresCenStr,
+        trybProsty = trybProsty, krokAsystenta = krokAsystenta,
+        material = material, wymiary = wymiary,
+        modelTekstuAi = modelTekstuAi, modelObrazuAi = modelObrazuAi, modelWideoAi = modelWideoAi,
+        doUzupelnienia = doUzupelnienia, zrodloOpisu = zrodloOpisu, ostrzezenieOpisu = ostrzezenieOpisu,
     )
     LaunchedEffect(biezaca) { naZapiszKopie(biezaca) }
 
     var kopiaOdrzucona by remember(p.id) { mutableStateOf(false) }
     val mozliwePrzywrocenie = false
 
-    var adresZAparatu by remember { mutableStateOf<Uri?>(null) }
+    var adresZAparatu by rememberSaveable { mutableStateOf<Uri?>(null) }
     val zrobZdjecie = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { udane: Boolean ->
@@ -445,7 +453,7 @@ fun EkranKreatora(
         if (szkic.opis.isNotBlank()) opis = szkic.opis
         if (szkic.kategoria.isNotBlank() && szkic.kategoria != "inne") kategoria = szkic.kategoria
         if (szkic.opisZdjecia.isNotBlank()) opisZdjecia = szkic.opisZdjecia
-        if (szkic.cena.isNotBlank()) cena = szkic.cena
+        cena = cenaTylkoOdUzytkownika(cena, notatka)
         if (szkic.waga.isNotBlank()) waga = szkic.waga
         if (szkic.czasRealizacji.isNotBlank()) czas = szkic.czasRealizacji
         if (szkic.jednostka.isNotBlank()) jednostka = szkic.jednostka
@@ -458,7 +466,7 @@ fun EkranKreatora(
         if (szkic.opisKrotki.isNotBlank()) opisKrotki = szkic.opisKrotki
         if (szkic.opis.isNotBlank()) opis = szkic.opis
         if (szkic.kategoria.isNotBlank() && szkic.kategoria != "inne") kategoria = szkic.kategoria
-        if (szkic.cena.isNotBlank()) cena = szkic.cena
+        cena = cenaTylkoOdUzytkownika(cena, notatka)
         if (szkic.waga.isNotBlank()) waga = szkic.waga
         if (szkic.czasRealizacji.isNotBlank()) czas = szkic.czasRealizacji
         if (szkic.doUzupelnienia.isNotEmpty()) doUzupelnienia = szkic.doUzupelnienia
@@ -527,238 +535,111 @@ fun EkranKreatora(
         )
     }
 
-    // Okienko wyboru silnika. Pytamy przy kazdym zleceniu, bo odpowiedz zalezy
-    // od tego, co akurat zyje: limit Gemini potrafi paść w srodku partii zdjec,
-    // a komputer w warsztacie bywa wylaczony.
-    pytanieOSilnik?.let { zadanie ->
-        val opcje = when (zadanie) {
-            "opis", "poprawa-opisu" -> listOf(
-                TrzyOpcje(
-                    "meta", "Agent Meta AI (Llama 3 Vision)",
-                    "Generowanie opisu rzemiosła i marketingu z Meta AI.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "copilot", "Agent Microsoft Copilot (GPT-4o)",
-                    "Opis handlowy i wycena rynkowa z Microsoft Copilot.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "gemini", "Agent Google Gemini (3.6 Flash / Pro)",
-                    "Oficjalne modele Google: 3.6 Flash dla szybkości, Pro dla redakcji.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "muse", "Agent Muse Code (Lokalny PC CLI)",
-                    "Lokalny agent redakcyjny na Twoim komputerze bez opłat i limitów.",
-                    true,
-                ),
-            )
-            "auto-ciag" -> listOf(
-                TrzyOpcje(
-                    "meta", "Agent Meta AI (Pełny ciąg)",
-                    "Kadr studyjny + animacja obrotowa 360° GIF przez Meta AI.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "flow", "Agent Google Flow (Pełny ciąg)",
-                    "Kadr studyjny + ujęcie Veo 3.1 & Omni z dźwiękiem.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "gemini", "Agent Google Gemini (Pełny ciąg)",
-                    "Wymiana tła Imagen 3.0 + animacja Veo w chmurze.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "forge", "Agent Karta RTX 5070 (Pełny ciąg)",
-                    "Wycięcie tła maską (rembg 1.3s) + rendering i animacja lokalnie.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "copilot", "Agent Microsoft Copilot (Pełny ciąg)",
-                    "Kadr DALL-E 3 + animacja przez Copilota.",
-                    true,
-                ),
-            )
-            "tlo" -> listOf(
-                TrzyOpcje(
-                    "meta", "Agent Meta AI (Przeglądarka)",
-                    "Wymiana tła i stylizacja kadru w Meta AI (16:9, 9:16, 1:1).",
-                    true,
-                ),
-                TrzyOpcje(
-                    "flow", "Agent Google Flow (Przeglądarka)",
-                    "Generowanie i stylizacja kadru przez Google Flow.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "copilot", "Agent Microsoft Copilot (DALL-E 3)",
-                    "Stylizacja tła i kadru przez Copilota w przeglądarce.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "forge", "Agent Karta RTX 5070 (Rembg)",
-                    "Wycięcie tła maską (1.3s) i pastelowe tło studyjne na PC.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "gemini", "Agent Google Gemini (Imagen 3)",
-                    "Generowanie i stylizacja tła przez Imagen 3.0 w chmurze.",
-                    true,
-                ),
-            )
-            "upiekszanie" -> listOf(
-                TrzyOpcje(
-                    "meta", "Agent Meta AI (Przeglądarka)",
-                    "Poprawa oświetlenia, ostrości i nastroju przez Meta AI.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "flow", "Agent Google Flow (Przeglądarka)",
-                    "Poprawa jakości ujęcia przez Google Flow.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "copilot", "Agent Microsoft Copilot (Przeglądarka)",
-                    "Poprawa stylu i światła przez Copilota.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "forge", "Agent Karta RTX 5070 (PC)",
-                    "Obróbka światła i kontrastu na lokalnej karcie graficznej.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "gemini", "Agent Google Gemini (Imagen 3)",
-                    "Poprawa detali i oświetlenia przez chmurę Google.",
-                    true,
-                ),
-            )
-            else -> listOf(
-                TrzyOpcje(
-                    "meta", "Agent Meta AI (Turntable 360° GIF)",
-                    "Natywny obrót 360° GIF w przeglądarce Meta AI (format 9:16 lub 16:9).",
-                    true,
-                ),
-                TrzyOpcje(
-                    "flow", "Agent Google Flow (Veo 3.1 & Omni)",
-                    "Generowanie wideo Veo 3.1 przez Agenta Google Flow (720p 8s).",
-                    true,
-                ),
-                TrzyOpcje(
-                    "gemini", "Agent Google Gemini (Veo Cloud)",
-                    "Generowanie wideo przez oficjalny model Google Veo.",
-                    true,
-                ),
-                TrzyOpcje(
-                    "comfy", "Agent Karta RTX 5070 (ComfyUI)",
-                    "Lokalna animacja na karcie graficznej PC.",
-                    true,
-                ),
-            )
-        }
-
+    // Zachowana, jawnie oddzielona droga dla wcześniej skonfigurowanych integracji opisów.
+    if (poprzedniePolaczenia) {
         WyborSilnika(
-            tytul = when (zadanie) {
-                "opis" -> "Czym napisać opis?"
-                "poprawa-opisu" -> "Czym poprawić opis?"
-                "auto-ciag" -> "Cały ciąg — tło, światło, animacja"
-                "tlo" -> "Czym wymienić tło?"
-                "upiekszanie" -> "Czym poprawić światło i ostrość?"
-                else -> "Czym zrobić animację?"
+            tytul = "Poprzednie połączenia opisów",
+            opcje = listOf(
+                TrzyOpcje("gemini", "Gemini z ustawień", "Koszt zależy od konta API. Listę modeli sprawdzisz w Pomocy.", maKluczGemini && modeleTekstowe.isNotEmpty()),
+                TrzyOpcje("muse", "Muse na komputerze", "Poprzedni most warsztatu. Może wymagać abonamentu.", museDostepny),
+                TrzyOpcje("meta", "Meta AI na komputerze", "Poprzednie połączenie przeglądarki; dostęp zależy od sesji i limitów.", metaDziala),
+                TrzyOpcje("copilot", "Copilot na komputerze", "Poprzednie połączenie przeglądarki; dostęp zależy od sesji i limitów.", copilotDziala),
+            ),
+            modele = modeleTekstowe,
+            modelDomyslny = modelOpisu,
+            naAnuluj = { poprzedniePolaczenia = false },
+            naWykonaj = { silnik, model, dodatkowe, _ ->
+                poprzedniePolaczenia = false
+                val foto = lokalneZdjecie
+                if (foto != null) naOpiszZeZdjecia(foto, notatka, WyborRoboty(silnik, model, dodatkowe), zastosujSzkic)
+                else naPoprawOpis(nazwa, opisKrotki, opis.ifBlank { notatka }, cena, WyborRoboty(silnik, model, dodatkowe), nadpiszSzkicem)
             },
-            opcje = opcje,
-            modele = if (zadanie in listOf("tlo", "upiekszanie", "auto-ciag")) modeleObrazowe
-                     else modeleTekstowe,
-            modelDomyslny = if (zadanie in listOf("tlo", "upiekszanie", "auto-ciag")) modelObrazu
-                            else modelOpisu,
+        )
+    }
+
+    // Katalog warsztatu jest źródłem modeli nowego asystenta i obróbki mediów.
+    pytanieOSilnik?.let { zadanie ->
+        LaunchedEffect(zadanie) { naOdswiezModeleAi() }
+        DialogZadaniaAi(
+            zadanie, katalogAi, katalogAiWToku, bladKataloguAi,
+            modelTekstuAi, modelObrazuAi, modelWideoAi,
+            naModel = { rodzaj, id ->
+                when (rodzaj) {
+                    "tekst" -> modelTekstuAi = id
+                    "obraz" -> modelObrazuAi = id
+                    else -> modelWideoAi = id
+                }
+            },
+            naOdswiez = naOdswiezModeleAi,
             naAnuluj = { pytanieOSilnik = null },
-            // Ksztalt kadru ma sens przy zdjeciu i przy animacji; przy opisie
-            // nie ma czego ksztaltowac.
-            pokazProporcje = zadanie in listOf("tlo", "upiekszanie", "animacja", "auto-ciag"),
-            naWykonaj = { silnik, model, dodatkowe, proporcje ->
+            naWykonaj = { dodatkowe, proporcje ->
                 pytanieOSilnik = null
                 when (zadanie) {
-                    "opis" -> naOpiszZeZdjecia(
-                        lokalneZdjecie!!,
-                        listOf(notatka, dodatkowe).filter { it.isNotBlank() }.joinToString(". "),
-                        WyborRoboty(silnik, model),
-                        zastosujSzkic,
-                    )
-                    "poprawa-opisu" -> {
-                        opisPrzedPoprawka = Triple(nazwa, opisKrotki, opis)
-                        naPoprawOpis(nazwa, opisKrotki, opis, cena, WyborRoboty(silnik, model, dodatkowe), nadpiszSzkicem)
-                    }
-                    "auto-ciag" -> naCiagAuto(
-                        lokalneZdjecie!!,
-                        notatka.ifBlank { nazwa },
-                        proporcje,
-                        dodatkowe,
-                        silnik,
-                        { poprawione ->
-                            // Kazdy krok oddaje kadr od razu, wiec widac postep,
-                            // a nie tylko kolo na ekranie. Oryginal zapamietujemy
-                            // raz — przy pierwszym podmienieniu.
-                            if (zdjecieOryginalne == null) zdjecieOryginalne = lokalneZdjecie
-                            lokalneZdjecie = poprawione
-                        },
-                        { film -> swiezaAnimacja = film },
-                    )
-                    "tlo", "upiekszanie" -> naPoprawZdjecie(
-                        lokalneZdjecie!!,
-                        WyborRoboty(
-                            silnik, model,
-                            // Domyslne polecenie zadania + to, co dopisal czlowiek.
-                            // Kolejnosc nie jest obojetna: dopisek na koncu wazy
-                            // wiecej i moze poprawic to, co stoi wczesniej.
-                            listOf(
-                                if (zadanie == "tlo")
-                                    polecenieTla(notatka.ifBlank { nazwa }.ifBlank { "handmade craft object" })
-                                else
-                                    polecenieUpiekszania(notatka.ifBlank { nazwa }.ifBlank { "handmade craft object" }),
-                                dodatkowe,
-                            ).filter { it.isNotBlank() }.joinToString(", "),
-                            proporcje,
+                    "opis", "poprawa-opisu" -> naOpisAi(
+                        lokalneZdjecie,
+                        pl.fwdrucik.sklep.siec.DaneOpisuAi(
+                            notatka = listOf(notatka, if (zadanie == "poprawa-opisu") opisKrotki + "\n" + opis else "", dodatkowe)
+                                .filter { it.isNotBlank() }.joinToString("\n"),
+                            nazwa = nazwa, material = material, wymiary = wymiary, model = modelTekstuAi,
                         ),
-                    ) { poprawione -> swiezyKadr = poprawione }
-                    else -> {
-                        // „auto" rozstrzyga model po stanie serwera; tutaj tylko
-                        // tlumaczymy wybor na nazwe zadania, ktora rozumie serwer.
-                        val zadanieSerwera = when (silnik) {
-                            "flow" -> "animacja-flow"
-                            "gemini" -> "animacja-gemini"
-                            "meta" -> "animacja-meta"
-                            "comfy" -> "animacja"
-                            else -> when (silnikAnimacji) {
-                                "flow" -> "animacja-flow"
-                                "gemini" -> "animacja-gemini"
-                                "meta" -> "animacja-meta"
-                                else -> "animacja"
-                            }
+                    ) { propozycjaOpisu = it }
+                    "auto-ciag" -> lokalneZdjecie?.let { foto ->
+                        naCiagModelami(foto, notatka.ifBlank { nazwa }, proporcje, dodatkowe, modelObrazuAi, modelWideoAi,
+                            { poprawione ->
+                                if (zdjecieOryginalne == null) zdjecieOryginalne = lokalneZdjecie
+                                lokalneZdjecie = poprawione
+                            },
+                            { film -> swiezaAnimacja = film },
+                        )
+                    }
+                    else -> lokalneZdjecie?.let { foto ->
+                        val coTo = notatka.ifBlank { nazwa }.ifBlank { "wyrób na zdjęciu" }
+                        val polecenie = when (zadanie) {
+                            "tlo" -> polecenieTla(coTo)
+                            "upiekszanie" -> polecenieUpiekszania(coTo)
+                            else -> poleceniObrotu(coTo)
                         }
-                        // Zdjecie wyrobu idzie jako kadr odniesienia — Veo animuje
-                        // TEN przedmiot, a nie wyobrazenie o nim. Opis mowi, co ma
-                        // sie dziac; dodatkowe polecenie doklejamy na koncu.
-                        // Bez nazwy i bez notatki prompt szedl jako
-                        // „product turntable: , slow smooth..." — z pusta
-                        // dziura w miejscu przedmiotu. Model dostawal wtedy
-                        // samo zdjecie i zdanie o obrocie czegokolwiek.
-                        // Podstawiamy neutralny rzeczownik zamiast pustki.
-                        val coAnimujemy = notatka.ifBlank { nazwa }
-                            .ifBlank { "handmade craft object from the photo" }
-                        naZlecWarsztatowi(
-                            zadanieSerwera,
-                            lokalneZdjecie!!,
-                            listOf(
-                                poleceniObrotu(coAnimujemy),
-                                dodatkowe,
-                            ).filter { it.isNotBlank() }.joinToString(", "),
-                            proporcje,
-                        ) { wynik -> swiezaAnimacja = wynik }
+                        naZlecModelem(
+                            if (zadanie == "animacja") "animacja" else "zdjecie-produktowe",
+                            foto, listOf(polecenie, dodatkowe).filter { it.isNotBlank() }.joinToString(", "),
+                            proporcje, if (zadanie == "animacja") modelWideoAi else modelObrazuAi,
+                        ) { wynik -> if (zadanie == "animacja") swiezaAnimacja = wynik else swiezyKadr = wynik }
                     }
                 }
             },
+        )
+    }
+
+    propozycjaOpisu?.let { propozycja ->
+        AlertDialog(
+            onDismissRequest = { propozycjaOpisu = null },
+            title = { Text("Sprawdź propozycję opisu") },
+            text = {
+                Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
+                    Text(propozycja.nazwa, style = MaterialTheme.typography.titleMedium)
+                    Text(propozycja.opisKrotki, Modifier.padding(top = 8.dp))
+                    Text(propozycja.opis, Modifier.padding(top = 8.dp))
+                    propozycja.doUzupelnienia.forEach { Text("Do sprawdzenia: ${pytanieOBrakujacyFakt(it)}", Modifier.padding(top = 8.dp)) }
+                    propozycja.ostrzezenie?.takeIf { it.isNotBlank() }?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    Text("Model: ${propozycja.model.ifBlank { "nie podano" }}. Źródło: ${propozycja.zrodlo.ifBlank { "nie podano" }}.",
+                        style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 12.dp))
+                    Text("Sprawdź fakty. Asystent może się pomylić.")
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    opisPrzedPoprawka = Triple(nazwa, opisKrotki, opis)
+                    if (propozycja.nazwa.isNotBlank()) nazwa = propozycja.nazwa
+                    opisKrotki = propozycja.opisKrotki
+                    opis = propozycja.opis
+                    propozycja.kategoria?.takeIf { it.isNotBlank() }?.let { kategoria = it }
+                    doUzupelnienia = propozycja.doUzupelnienia
+                    zrodloOpisu = "Model: ${propozycja.model}. Źródło: ${propozycja.zrodlo}."
+                    ostrzezenieOpisu = propozycja.ostrzezenie.orEmpty()
+                    propozycjaOpisu = null
+                }) { Text("Użyj tego opisu") }
+            },
+            dismissButton = { TextButton(onClick = { propozycjaOpisu = null }) { Text("Zostaw mój tekst") } },
         )
     }
 
@@ -798,14 +679,14 @@ fun EkranKreatora(
             dismissButton = {
                 Row {
                     TextButton(onClick = {
-                        if (p.id > 0) {
+                        if (!trybProsty && p.id > 0) {
                             naWgrajZdjecie(p.id, kadr, opisZdjecia.ifBlank { nazwa })
                         } else {
                             dodatkoweKadry.add(kadr)
                         }
                         swiezyKadr = null
                     }) { Text("Do galerii") }
-                    TextButton(onClick = { swiezyKadr = null }) { Text("Usuń") }
+                    TextButton(onClick = { swiezyKadr = null }) { Text("Odrzuć wynik") }
                 }
             },
         )
@@ -814,7 +695,7 @@ fun EkranKreatora(
     swiezaAnimacja?.let { film ->
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("Gotowy materiał ruchomy — co z nim zrobić?") },
+            title = { Text("Film jest gotowy. Czy chcesz go użyć?") },
             text = {
                 Column {
                     val sciezka = film.toString().lowercase()
@@ -855,7 +736,7 @@ fun EkranKreatora(
                         )
                     }
                     Text(
-                        "Materiał w ogłoszeniu staje przed zdjęciami i to on rusza się " +
+                        if (trybProsty) "Sprawdź, czy film pokazuje Twój wyrób bez zmian. Akceptacja zachowa go w kopii na telefonie. Do sklepu wyślesz go dopiero przy zapisie produktu." else "Materiał w ogłoszeniu staje przed zdjęciami i to on rusza się " +
                             "na stronie produktu. Zostawiony w kreatorze posłuży do " +
                             "dalszej roboty, ale nie trafi jeszcze do sklepu.",
                         style = MaterialTheme.typography.bodySmall,
@@ -869,17 +750,17 @@ fun EkranKreatora(
                     animacja = film
                     // Do sklepu material idzie tylko przy zapisanym produkcie:
                     // serwer przypina pliki do istniejacego wyrobu.
-                    if (p.id > 0) naWgrajPlik(p.id, film, nazwa)
+                    if (!trybProsty && p.id > 0) naWgrajPlik(p.id, film, nazwa)
                     swiezaAnimacja = null
-                }) { Text(if (p.id > 0) "Dodaj do ogłoszenia" else "Zatrzymaj") }
+                }) { Text(if (trybProsty) "Użyj tego filmu" else if (p.id > 0) "Dodaj do ogłoszenia" else "Zatrzymaj") }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = {
+                    if (!trybProsty) TextButton(onClick = {
                         animacja = film
                         swiezaAnimacja = null
                     }) { Text("Zostaw w kreatorze") }
-                    TextButton(onClick = { swiezaAnimacja = null }) { Text("Usuń") }
+                    TextButton(onClick = { swiezaAnimacja = null }) { Text("Odrzuć wynik") }
                 }
             },
         )
@@ -893,8 +774,90 @@ fun EkranKreatora(
             style = MaterialTheme.typography.headlineSmall,
         )
 
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(trybProsty, { trybProsty = true }, enabled = !agentPracuje && !badanieCenyWToku && !tworzenieSzkicuWToku, label = { Text("Prosty") })
+            FilterChip(!trybProsty, { trybProsty = false }, enabled = !agentPracuje && !badanieCenyWToku && !tworzenieSzkicuWToku, label = { Text("Zaawansowany") })
+        }
+        Text("Te same dane w obu trybach. Prosty prowadzi krok po kroku. Zaawansowany pokazuje wszystkie ustawienia.", style = MaterialTheme.typography.bodySmall)
+        if (trybProsty) {
+            AsystentSklepu(
+                dane = biezaca, zdjecie = lokalneZdjecie, animacja = animacja,
+                zajety = agentPracuje || tworzenieSzkicuWToku || badanieCenyWToku,
+                katalog = katalogAi, katalogWToku = katalogAiWToku, bladKatalogu = bladKataloguAi,
+                naZmien = {
+                    nazwa = it.nazwa; notatka = it.notatka; opisKrotki = it.opisKrotki; opis = it.opis
+                    material = it.material; wymiary = it.wymiary; cena = it.cena
+                    modelTekstuAi = it.modelTekstuAi; krokAsystenta = it.krokAsystenta
+                    modelObrazuAi = it.modelObrazuAi; modelWideoAi = it.modelWideoAi
+                    allegroCena = it.allegroCena; allegroKategoria = it.allegroKategoria.orEmpty(); stan = it.stan
+                    allegroKategoriaNazwa = it.allegroKategoriaNazwa; allegroKategoriaSciezka = it.allegroKategoriaSciezka
+                },
+                naAparat = {
+                    val plik = Aparat.nowePlikDoZdjecia(context)
+                    adresZAparatu = Aparat.adresDlaAparatu(context, plik)
+                    zrobZdjecie.launch(adresZAparatu!!)
+                },
+                naGalerie = { wybierzDoAgenta.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                naOpis = {
+                    naOpisAi(lokalneZdjecie, pl.fwdrucik.sklep.siec.DaneOpisuAi(notatka, nazwa, material, wymiary, modelTekstuAi)) {
+                        propozycjaOpisu = it
+                    }
+                },
+                naOdswiezModele = naOdswiezModeleAi,
+                naPoprawTloISwiatlo = {
+                    lokalneZdjecie?.let { foto ->
+                        naZlecModelem("zdjecie-produktowe", foto, Polecenia.tloISwiatlo(nazwa.ifBlank { notatka }), "16:9", modelObrazuAi) { swiezyKadr = it }
+                    }
+                },
+                naAnimuj = {
+                    lokalneZdjecie?.let { foto ->
+                        naZlecModelem("animacja", foto, Polecenia.obrot(nazwa.ifBlank { notatka }), "16:9", modelWideoAi) { swiezaAnimacja = it }
+                    }
+                },
+                postep = postepPracy, bladOperacji = bladPracy,
+                naZbadajCeny = naZbadajCeneRynkowa?.let { zbadaj -> {
+                    zapytanieProstejWyceny = "$nazwa\n$kategoria"
+                    zbadaj(nazwa.ifBlank { notatka }, kategoria) { _, _, _, _ -> }
+                } },
+                badanieCen = badanieCenyWToku,
+                sugestiaCeny = sugerowanaCenaRynkowa.takeIf { zapytanieProstejWyceny == "$nazwa\n$kategoria" },
+                wycenaZmierzona = wycenaZmierzona, ostrzezenieWyceny = ostrzezenieWyceny,
+                bladWyceny = bladWyceny.takeIf { zapytanieProstejWyceny == "$nazwa\n$kategoria" },
+                tworzenieSzkicu = tworzenieSzkicuWToku, komunikatAllegro = komunikatAllegro,
+                maZdjecieNaSerwerze = p.obrazy.isNotEmpty(),
+                wyszukiwanieKategorii = wyszukiwanieKategorii, naSzukajKategorii = naSzukajKategorii,
+                naSzkicAllegro = naUtworzSzkicAllegro?.let { utworz -> {
+                    if (biezaca.brakiSzkicuAllegro().isEmpty() && !tworzenieSzkicuWToku && !agentPracuje && allegroId.isBlank() && allegroUrl.isBlank()) {
+                        tworzenieSzkicuWToku = true
+                        komunikatAllegro = null
+                        val urlZdjecia = p.obrazy.firstOrNull()?.src?.let {
+                            if (it.startsWith("https://") || it.startsWith("http://")) it else BuildConfig.ADRES_API + it
+                        }.orEmpty()
+                        utworz(pl.fwdrucik.sklep.narzedzia.AllegroFormat.oczyscTytul(nazwa), allegroKategoria.trim(),
+                            (zloteNaGrosze(allegroCena.ifBlank { cena }) ?: 0) / 100.0,
+                            pl.fwdrucik.sklep.narzedzia.AllegroFormat.zbudujOpisHtml(nazwa, opisKrotki, opis), urlZdjecia, stan.trim().toInt()) { sukces, url ->
+                            tworzenieSzkicuWToku = false
+                            if (sukces) {
+                                allegroStatus = "szkic"
+                                allegroUrl = url.orEmpty()
+                                allegroId = url.orEmpty().substringAfterLast('/').takeIf { it.isNotBlank() && it.all(Char::isDigit) }.orEmpty()
+                                komunikatAllegro = "Utworzono prywatny szkic INACTIVE. Nie uruchomiono sprzedaży. Powiązanie jest zapisane w kopii na telefonie."
+                            } else komunikatAllegro = "Nie potwierdzono utworzenia prywatnego szkicu. Sprawdź komunikat błędu oraz szkice na Allegro przed ponowieniem."
+                        }
+                    }
+                } },
+                naZachowaj = { naZapiszKopie(biezaca); naWyjscie() },
+                naPublikuj = {
+                    naZapisz(biezaca.naProdukt(p).copy(status = "opublikowany"), cena.trim(), cenaPromo.trim(),
+                        lokalneZdjecie, dodatkoweKadry.toList(), animacja, opisZdjecia.ifBlank { nazwa })
+                },
+                naZaawansowane = { trybProsty = false; otwarta = 3 },
+            )
+        }
+        if (!trybProsty) {
+
         // =====================================================================
-        // SZYBKI ASYSTENT DLA ŻONY (KROK PO KROKU 1-KLIK)
+        // Dotychczasowy pełny proces, zachowany w trybie zaawansowanym.
         // =====================================================================
         Card(
             modifier = Modifier
@@ -912,7 +875,7 @@ fun EkranKreatora(
                     Spacer(Modifier.width(8.dp))
                     Column {
                         Text(
-                            "Szybki Asystent (Krok po kroku)",
+                            "Pełny proces: sklep i Allegro",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -984,10 +947,7 @@ fun EkranKreatora(
                     Button(
                         onClick = {
                             val frazaDoSzukania = nazwa.ifBlank { notatka.take(50).ifBlank { "rękodzieło artystyczne" } }
-                            naZbadajCeneRynkowa?.invoke(frazaDoSzukania, kategoria) { sug, sugAllegro, minC, maxC ->
-                                if (cena.isBlank()) cena = "%.2f".format(java.util.Locale.US, sug)
-                                if (allegroCena.isBlank()) allegroCena = "%.2f".format(java.util.Locale.US, sugAllegro)
-                            }
+                            naZbadajCeneRynkowa?.invoke(frazaDoSzukania, kategoria) { _, _, _, _ -> }
                         },
                         enabled = !badanieCenyWToku && (nazwa.isNotBlank() || notatka.isNotBlank() || lokalneZdjecie != null),
                         modifier = Modifier.weight(1f)
@@ -1015,7 +975,9 @@ fun EkranKreatora(
                 }
 
                 // Wyniki badania cen rynkowych
-                if (sugerowanaRynkowaStr.isNotBlank() || sugerowanaCenaRynkowa != null) {
+                if (!bladWyceny.isNullOrBlank()) Text(bladWyceny, color = MaterialTheme.colorScheme.error)
+                Text("Badanie nie zmienia wpisanej ceny. Bez potwierdzonych ofert wpisz cenę ręcznie.", style = MaterialTheme.typography.bodySmall)
+                if (wycenaZmierzona && !badanieCenyWToku && sugerowanaCenaRynkowa != null && sugerowanaCenaRynkowa.isFinite() && sugerowanaCenaRynkowa > 0) {
                     Card(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -1042,8 +1004,8 @@ fun EkranKreatora(
                                 )
                             }
                             Spacer(Modifier.height(4.dp))
-                            val sRyn = sugerowanaRynkowaStr.ifBlank { sugerowanaCenaRynkowa?.let { "%.2f".format(java.util.Locale.US, it) }.orEmpty() }
-                            val sAll = sugerowanaAllegroStr.ifBlank { sugerowanaCenaAllegro?.let { "%.2f".format(java.util.Locale.US, it) }.orEmpty() }
+                            val sRyn = "%.2f".format(java.util.Locale.US, sugerowanaCenaRynkowa)
+                            val sAll = sugerowanaCenaAllegro?.takeIf { it.isFinite() && it > 0 }?.let { "%.2f".format(java.util.Locale.US, it) }.orEmpty()
                             Text(
                                 (if (wycenaZmierzona) "• Mediana ofert: " else "• Szacowana cena: ") +
                                         "$sRyn zł" +
@@ -1051,7 +1013,7 @@ fun EkranKreatora(
                                 style = MaterialTheme.typography.bodySmall
                             )
                             Text(
-                                "• Sugerowana na Allegro (+12% prowizji): $sAll zł",
+                                "• Propozycja na Allegro z buforem (nie potwierdza wysokości prowizji): $sAll zł",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
                             )
@@ -1062,6 +1024,7 @@ fun EkranKreatora(
                                 if (sRyn.isNotBlank()) {
                                     OutlinedButton(
                                         onClick = { cena = sRyn },
+                                        enabled = wycenaZmierzona && !badanieCenyWToku && !agentPracuje,
                                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                                         modifier = Modifier.weight(1f)
                                     ) {
@@ -1071,6 +1034,7 @@ fun EkranKreatora(
                                 if (sAll.isNotBlank()) {
                                     Button(
                                         onClick = { allegroCena = sAll },
+                                        enabled = wycenaZmierzona && !badanieCenyWToku && !agentPracuje,
                                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                                         modifier = Modifier.weight(1f)
                                     ) {
@@ -1127,7 +1091,7 @@ fun EkranKreatora(
                     ) {
                         Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Utwórz obrót 360° (Google Flow / Meta AI)")
+                        Text("Przygotuj film z obracającym się wyrobem")
                     }
                 }
 
@@ -1203,7 +1167,7 @@ fun EkranKreatora(
                                     tworzenieSzkicuWToku = true
                                     naUtworzSzkicAllegro?.invoke(
                                         tytulOczyszczony,
-                                        kategoria,
+                                        allegroKategoria.trim().ifBlank { kategoria },
                                         cenaKwota,
                                         htmlOpis,
                                         urlZdjecia,
@@ -1386,11 +1350,11 @@ fun EkranKreatora(
                 if (agentPracuje) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(8.dp))
-                    Text("🤖 Antigravity pracuje...")
+                    Text("Trwa przygotowanie materiałów…")
                 } else {
                     Icon(Icons.Filled.AutoAwesome, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("🤖 Antigravity — Stwórz wszystko z kadru", style = MaterialTheme.typography.titleSmall)
+                    Text("Przygotuj tło, światło i film", style = MaterialTheme.typography.titleSmall)
                 }
             }
 
@@ -1592,6 +1556,11 @@ fun EkranKreatora(
             enabled = !agentPracuje,
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         ) { Text("Popraw napisany opis") }
+        TextButton(onClick = { poprzedniePolaczenia = true }, enabled = !agentPracuje) {
+            Text("Poprzednie połączenia opisów")
+        }
+        Text("Dla wcześniej skonfigurowanych integracji. Nowy asystent wybiera modele z katalogu warsztatu.",
+            style = MaterialTheme.typography.bodySmall)
 
         opisPrzedPoprawka?.let { (staraNazwa, staryKrotki, staryOpis) ->
             TextButton(onClick = {
@@ -1712,6 +1681,12 @@ fun EkranKreatora(
                 liczbowe = true
             )
 
+            androidx.compose.material3.OutlinedTextField(
+                value = allegroKategoria, onValueChange = { allegroKategoria = it; allegroKategoriaNazwa = ""; allegroKategoriaSciezka = "" },
+                label = { Text("Numer kategorii Allegro (ID)") },
+                supportingText = { Text("Inny niż kategoria sklepu. To samo pole jest w trybie Prostym.") },
+                modifier = Modifier.fillMaxWidth(), enabled = !agentPracuje && !tworzenieSzkicuWToku,
+            )
             Text(
                 "Status oferty na Allegro",
                 style = MaterialTheme.typography.labelMedium,
@@ -1742,7 +1717,7 @@ fun EkranKreatora(
                     tworzenieSzkicuWToku = true
                     naUtworzSzkicAllegro?.invoke(
                         tytulOczyszczony,
-                        kategoria,
+                        allegroKategoria.trim().ifBlank { kategoria },
                         cenaKwota,
                         htmlOpis,
                         urlZdjecia,
@@ -2066,7 +2041,7 @@ fun EkranKreatora(
                         style = MaterialTheme.typography.titleSmall)
                     doUzupelnienia.forEach { pytanie ->
                         Text(
-                            "• $pytanie",
+                            "• ${pytanieOBrakujacyFakt(pytanie)}",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(top = 4.dp),
                         )
@@ -2083,7 +2058,7 @@ fun EkranKreatora(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             OutlinedButton(
-                onClick = naWyjscie,
+                onClick = { naZapiszKopie(biezaca); naWyjscie() },
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                 modifier = Modifier.weight(0.7f),
             ) {
@@ -2109,6 +2084,7 @@ fun EkranKreatora(
                         allegroCenaGr = zloteNaGrosze(allegroCena),
                         allegroId = allegroId.trim().ifBlank { null },
                         allegroStatus = allegroStatus,
+                        allegroKategoria = allegroKategoria.trim().ifBlank { null },
                     )
                     naZapisz(
                         zebrany,
@@ -2143,6 +2119,7 @@ fun EkranKreatora(
                         allegroCenaGr = zloteNaGrosze(allegroCena),
                         allegroId = allegroId.trim().ifBlank { null },
                         allegroStatus = allegroStatus,
+                        allegroKategoria = allegroKategoria.trim().ifBlank { null },
                     )
                     naZapisz(
                         zebrany,
@@ -2161,7 +2138,14 @@ fun EkranKreatora(
                 Text("Zapisz", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelMedium)
             }
         }
+        }
     }
+}
+
+private fun adresKopii(uri: Uri?): String = when {
+    uri == null -> ""
+    uri.scheme == "file" -> uri.path.orEmpty()
+    else -> uri.toString()
 }
 
 /**

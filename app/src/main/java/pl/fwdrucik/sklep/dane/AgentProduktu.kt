@@ -147,11 +147,10 @@ class AgentProduktu(
         - jednostka: szt., kpl., mb albo m2.
         - cena: jeśli w notatce jest kwota (np. "30zł", "30 zl", "za 30"),
           wpisz samą liczbę w złotych: "30".
-          JEŚLI W NOTATCE NIE MA CENY: oszacuj średnią rynkową cenę w Polsce dla
-          podobnego wyrobu rzemieślniczego / personalizowanego na zamówienie / custom
-          na podstawie materiału (żywica epoksydowa, stal, druk 3D, drewno, CNC),
-          nakładu pracy i stopnia trudności widocznego na zdjęciu. Wpisz realistyczną
-          kwotę w pełnych złotych (np. "45", "85", "160", "280"). Nie zostawiaj pustego.
+          JEŚLI UŻYTKOWNIK NIE PODAŁ CENY: zostaw pusty tekst "" i zapytaj
+          o cenę w do_uzupelnienia. Nie szacuj ceny rynkowej ani ceny sprzedaży.
+          Nie wyceniaj na podstawie zdjęcia, materiału, nakładu pracy czy historii
+          poprawek. Nie dodawaj niepodanych kwot także do nazwy lub opisu.
         - waga: szacunkowa waga w gramach (sama liczba), np. "50", "300", "1500".
         - czas_realizacji: szacowany czas wykonania, np. "3-5 dni roboczych", "gotowe od ręki".
         - opis_zdjecia: co widać na zdjęciu, jedno zdanie z frazą kluczową wyrobu. To trafia do atrybutu
@@ -172,7 +171,7 @@ class AgentProduktu(
             "opis_zdjecia" to Schemat("STRING", description = "Alt zdjęcia z frazą kluczową dla Google Grafika"),
             "cena" to Schemat(
                 "STRING",
-                description = "Sama liczba w złotych (kwota z notatki LUB oszacowana średnia cena rynkowa dla podobnego wyrobu custom/na zamówienie, np. 45, 120, 250).",
+                description = "Wyłącznie cena jawnie podana przez użytkownika, sama liczba w złotych. Jeśli jej nie podano: pusty tekst. Nigdy nie oszacowuj ceny rynkowej ani sprzedażowej.",
             ),
             "waga" to Schemat(
                 "STRING",
@@ -255,7 +254,7 @@ class AgentProduktu(
                     ?.let { "Model odmówił odpowiedzi ($it). Spróbuj z innym zdjęciem." }
                     ?: "Model nie zwrócił opisu. Spróbuj ponownie."
             )
-        return json.decodeFromString(tekst)
+        return json.decodeFromString<SzkicProduktu>(tekst).zCenaPotwierdzona(notatka)
     }
 
     /**
@@ -342,7 +341,7 @@ class AgentProduktu(
             append(lekcje(poprawki))
             appendLine()
             appendLine("NOTATKA SPRZEDAWCY:\n$notatka\n")
-            appendLine("Wyszukaj / oszacuj średnią cenę rynkową w PLN dla podobnego wyrobu customowego na zamówienie.")
+            appendLine("Cenę przepisz tylko z notatki sprzedawcy. Jeśli jej nie podał, pozostaw puste pole. Nie wyszukuj ani nie szacuj ceny rynkowej.")
             appendLine("Odpowiedz WYŁĄCZNIE obiektem JSON bez znaczników markdown:")
             appendLine("""{"nazwa":"","opis_krotki":"","opis":"","kategoria":"","jednostka":"szt.","opis_zdjecia":"","cena":"","waga":"","czas_realizacji":"","do_uzupelnienia":[]}""")
         }
@@ -380,7 +379,7 @@ class AgentProduktu(
             append(lekcje(poprawki))
             appendLine()
             appendLine("NOTATKA SPRZEDAWCY:\n$notatka\n")
-            appendLine("Napisz chwytliwy, rzemieślniczy opis produktu i oszacuj cenę.")
+            appendLine("Zredaguj opis produktu. Cenę przepisz tylko z notatki sprzedawcy; gdy jej nie podał, pozostaw puste pole. Nie szacuj ceny.")
             appendLine("Odpowiedz WYŁĄCZNIE obiektem JSON bez znaczników markdown:")
             appendLine("""{"nazwa":"","opis_krotki":"","opis":"","kategoria":"","jednostka":"szt.","opis_zdjecia":"","cena":"","waga":"","czas_realizacji":"","do_uzupelnienia":[]}""")
         }
@@ -438,7 +437,9 @@ class AgentProduktu(
             WSZYSTKIE fakty i nie dodawaj żadnych nowych: żadnych wymiarów,
             materiałów, czasów wykonania ani cech, których nie ma w tekście.
             Popraw język, skróć przesadę, ustaw rytm zdań. Krótki opis do 400
-            znaków. Jeśli nie ma ceny, oszacuj średnią cenę rynkową w PLN.
+            znaków. Cenę zachowaj tylko wtedy, gdy użytkownik podał ją jawnie.
+            Jeśli nie ma ceny, zwróć pusty tekst. Nie szacuj ceny rynkowej ani
+            sprzedażowej i nie dodawaj niepodanych kwot do opisu.
             Czego brakuje, wypisz w do_uzupelnienia.
 
         """.trimIndent() + "\n" + zrodlo
@@ -452,7 +453,7 @@ class AgentProduktu(
             if (!odp.ok || odp.odpowiedz.isBlank()) {
                 throw IOException(odp.blad.ifBlank { "Most do Meta AI nie odpowiedział." })
             }
-            return wylusknijSzkic(odp.odpowiedz, "$nazwa $opis")
+            return wylusknijSzkic(odp.odpowiedz, dodatkowe).zCenaPotwierdzona(dodatkowe, cena)
         }
 
         if (silnik == "muse") {
@@ -464,7 +465,7 @@ class AgentProduktu(
             if (!odp.ok || odp.odpowiedz.isBlank()) {
                 throw IOException(odp.blad.ifBlank { "Most do Muse nie odpowiedział." })
             }
-            return wylusknijSzkic(odp.odpowiedz, "$nazwa $opis")
+            return wylusknijSzkic(odp.odpowiedz, dodatkowe).zCenaPotwierdzona(dodatkowe, cena)
         }
 
         if (silnik == "copilot") {
@@ -476,7 +477,7 @@ class AgentProduktu(
             if (!odp.ok || odp.odpowiedz.isBlank()) {
                 throw IOException(odp.blad.ifBlank { "Most do Copilota nie odpowiedział." })
             }
-            return wylusknijSzkic(odp.odpowiedz, "$nazwa $opis")
+            return wylusknijSzkic(odp.odpowiedz, dodatkowe).zCenaPotwierdzona(dodatkowe, cena)
         }
 
         if (klucz.isBlank()) throw IOException("Brak klucza Gemini — wybierz Muse albo wpisz klucz.")
@@ -491,7 +492,7 @@ class AgentProduktu(
         )
         val odpowiedz = zGemini(model, klucz, zapytanie)
         val tekst = odpowiedz.tekst() ?: throw IOException("Model nie zwrócił poprawionego opisu.")
-        return json.decodeFromString(tekst)
+        return json.decodeFromString<SzkicProduktu>(tekst).zCenaPotwierdzona(dodatkowe, cena)
     }
 
     /**
@@ -543,7 +544,7 @@ class AgentProduktu(
         val do_ = bez.lastIndexOf('}')
         if (od >= 0 && do_ > od) {
             try {
-                return json.decodeFromString(bez.substring(od, do_ + 1))
+                return json.decodeFromString<SzkicProduktu>(bez.substring(od, do_ + 1)).zCenaPotwierdzona(zrodlo)
             } catch (e: Exception) {
                 // jeśli JSON był ucięty lub zawierał błąd składni, przejdź do parsera awaryjnego
             }
@@ -553,14 +554,11 @@ class AgentProduktu(
             ?: zrodlo.take(60).ifBlank { "Nowy produkt" }
         val opis = bez.trim()
         val opisKrotki = linie.getOrNull(1)?.take(300) ?: opis.take(300)
-        val cenaRegex = Regex("""(\d+[\d\s]*(?:[.,]\d{2})?)\s*(?:zł|pln)""", RegexOption.IGNORE_CASE)
-        val cena = cenaRegex.find(zrodlo + " " + bez)?.groupValues?.get(1)?.replace(" ", "")?.replace(",", ".") ?: ""
         return SzkicProduktu(
             nazwa = nazwa,
             opisKrotki = opisKrotki,
             opis = opis,
-            cena = cena,
-        )
+        ).zCenaPotwierdzona(zrodlo)
     }
 
     /**

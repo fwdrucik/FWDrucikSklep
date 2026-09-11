@@ -23,6 +23,19 @@ class WycenaRynkowaTest {
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    @Test fun bladLubPustyListingNigdyNieDajePomiaruDoZastosowania() {
+        assertFalse(OdpowiedzWyceny(ok = false, zrodlo = "allegro-api", sugerowanaCena = 99.0, liczbaOfert = 3).zmierzoneNaRynku)
+        assertFalse(OdpowiedzWyceny(ok = true, zrodlo = "allegro-listing", sugerowanaCena = 99.0, liczbaOfert = 0).zmierzoneNaRynku)
+        assertFalse(OdpowiedzWyceny(ok = true, zrodlo = "allegro-estymacja", sugerowanaCena = 99.0, liczbaOfert = 3).zmierzoneNaRynku)
+    }
+
+    @Test fun brakDostepu403ZachowujeWyjasnienieZamiastCeny() {
+        val odp = json.decodeFromString<OdpowiedzWyceny>("""{"ok":false,"zrodlo":"brak","liczba_ofert":0,"sugerowana_cena":0,"sugerowana_allegro":0,"min_cena":0,"max_cena":0,"blad":"Allegro nie przyznało dostępu do listingu (403 AccessDenied). Wpisz cenę ręcznie."}""")
+        assertFalse(odp.zmierzoneNaRynku)
+        assertEquals(0.0, odp.sugerowanaCena, 0.0)
+        assertTrue(odp.blad!!.contains("Wpisz cenę ręcznie"))
+    }
+
     @Test
     fun listingZAllegroJestOznaczonyJakoZmierzony() {
         val odp = json.decodeFromString<OdpowiedzWyceny>(
@@ -45,7 +58,7 @@ class WycenaRynkowaTest {
         // Gdy Allegro przyzna dostęp do /offers/listing, źródło zmieni nazwę
         // na „allegro-api" i ekran nie może wtedy pokazać ostrzeżenia.
         val odp = json.decodeFromString<OdpowiedzWyceny>(
-            """{"ok":true,"zrodlo":"allegro-api","sugerowana_cena":300.0}"""
+            """{"ok":true,"zrodlo":"allegro-api","sugerowana_cena":300.0,"liczba_ofert":1,"znalezione":[{"portal":"Allegro","cena":300,"tytul":"Stolik"}]}"""
         )
         assertTrue(odp.zmierzoneNaRynku)
     }

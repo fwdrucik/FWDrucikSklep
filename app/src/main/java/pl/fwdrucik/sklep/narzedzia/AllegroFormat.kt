@@ -38,9 +38,9 @@ object AllegroFormat {
      * <h2>, <p>, <b>, <ul>, <li>, <br>
      */
     fun zbudujOpisHtml(nazwa: String, opisKrotki: String, opis: String): String {
-        val nzw = nazwa.ifBlank { "Wyrób rzemieślniczy F.W. DRUCIK" }
-        val krotki = opisKrotki.replace("\n", "<br>").trim()
-        val dlugi = opis.replace("\n", "<br>").trim()
+        val nzw = escapeHtml(nazwa.ifBlank { "Wyrób F.W. DRUCIK" })
+        val krotki = escapeHtml(opisKrotki).replace("\r\n", "\n").replace("\n", "<br>").trim()
+        val dlugi = escapeHtml(opis).replace("\r\n", "\n").replace("\n", "<br>").trim()
 
         val sb = java.lang.StringBuilder()
         sb.append("<h2>").append(nzw).append("</h2>\n")
@@ -51,14 +51,13 @@ object AllegroFormat {
             sb.append("<h2>Opis i wykonanie</h2>\n")
             sb.append("<p>").append(dlugi).append("</p>\n")
         }
-        sb.append("<h2>Cechy wyrobu z pracowni F.W. DRUCIK</h2>\n")
-        sb.append("<ul>\n")
-        sb.append("  <li><b>Pracownia:</b> F.W. DRUCIK (Polska)</li>\n")
-        sb.append("  <li><b>Wykonanie:</b> 100% autorskie rękodzieło</li>\n")
-        sb.append("  <li><b>Dostawa:</b> Bezpieczne pakowanie ze wsparciem Allegro Smart!</li>\n")
-        sb.append("</ul>\n")
         return sb.toString().trim()
     }
+
+    /** Pola kreatora są zwykłym tekstem; znaczniki tworzy tylko ten formatter. */
+    fun escapeHtml(tekst: String): String = tekst.replace("&", "&amp;")
+        .replace("<", "&lt;").replace(">", "&gt;")
+        .replace("\"", "&quot;").replace("'", "&#39;")
 
     fun obliczCeneAllegro(cenaSklep: Double, prowizjaProcent: Double = 12.0): Double {
         return cenaSklep * (1.0 + prowizjaProcent / 100.0)

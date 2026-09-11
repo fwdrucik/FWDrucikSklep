@@ -194,9 +194,9 @@ fun EkranInstrukcji(
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp)) {
-                    Text("Domyślne silniki zadań", style = MaterialTheme.typography.titleSmall)
+                    Text("Poprzednie ustawienia silników", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "Wybierz domyślne drogi do zadań (możesz też zmieniać w locie przyciskiem w kreatorze):",
+                        "Zachowane ustawienia starszych połączeń. Nowy asystent i obróbka mediów korzystają z katalogu warsztatu; wybór modelu zmienisz w kreatorze. Poprzednie opisy są dostępne w trybie Zaawansowanym.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 6.dp),

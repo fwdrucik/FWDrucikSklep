@@ -29,6 +29,21 @@ import retrofit2.http.Url
 interface SerwerWarsztatu {
 
     @GET
+    suspend fun modeleAi(@Url adres: String): KatalogAi
+
+    @Multipart
+    @POST
+    suspend fun opisAi(
+        @Url adres: String,
+        @Part plik: MultipartBody.Part?,
+        @Part("notatka") notatka: RequestBody,
+        @Part("nazwa") nazwa: RequestBody,
+        @Part("material") material: RequestBody,
+        @Part("wymiary") wymiary: RequestBody,
+        @Part("model") model: RequestBody,
+    ): OpisAi
+
+    @GET
     suspend fun stan(@Url adres: String): StanSerwera
 
     @GET
@@ -80,6 +95,7 @@ interface SerwerWarsztatu {
          */
         @Part("proporcje") proporcje: RequestBody,
         @Part plik: MultipartBody.Part,
+        @Part("model") model: RequestBody? = null,
     ): OdpowiedzZlecenia
 
     /**
@@ -128,6 +144,12 @@ interface SerwerWarsztatu {
         @retrofit2.http.Query("fraza") fraza: String,
         @retrofit2.http.Query("kategoria") kategoria: String = "",
     ): OdpowiedzWyceny
+
+    @GET
+    suspend fun kategorieAllegro(
+        @Url adres: String,
+        @retrofit2.http.Query("fraza") fraza: String,
+    ): OdpowiedzKategoriiAllegro
 
     /**
      * Tworzy prywatny szkic oferty na Allegro (status INACTIVE).
@@ -260,7 +282,8 @@ data class OdpowiedzWyceny(
 ) {
     /** Czy kwota pochodzi z realnych ofert, a nie z tabeli awaryjnej. */
     val zmierzoneNaRynku: Boolean
-        get() = zrodlo.startsWith("allegro")
+        get() = ok && zrodlo in setOf("allegro-api", "allegro-listing") &&
+            liczbaOfert > 0 && sugerowanaCena.isFinite() && sugerowanaCena > 0
 }
 
 @Serializable

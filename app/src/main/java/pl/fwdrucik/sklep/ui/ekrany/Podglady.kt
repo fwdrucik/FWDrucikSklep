@@ -489,7 +489,7 @@ fun WyborSilnika(
     pokazProporcje: Boolean = false,
 ) {
     var silnik by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(opcje.firstOrNull { it.dostepny }?.klucz ?: "auto") }
-    var model by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(modelDomyslny) }
+    var model by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(modelDomyslny.takeIf { it in modele } ?: modele.firstOrNull().orEmpty()) }
     var dodatkowe by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("") }
     var proporcje by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf("16:9") }
 
@@ -534,11 +534,17 @@ fun WyborSilnika(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                     ) {
                         Text(
-                            "🤖 Agregator Gemini: model jest dobierany automatycznie w locie do zadania (Flash dla szybkości, Pro dla głębokiej redakcji, Imagen dla obrazu, Veo dla wideo).",
+                            "Poprzednie połączenie Gemini. Model pochodzi z listy pobranej z konta. Koszt zależy od taryfy API.",
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(8.dp),
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                         )
+                    }
+                    modele.forEach { id ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.RadioButton(selected = model == id, onClick = { model = id })
+                            Text(id, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
 
@@ -595,7 +601,7 @@ fun WyborSilnika(
         confirmButton = {
             androidx.compose.material3.TextButton(
                 onClick = { naWykonaj(silnik, model, dodatkowe.trim(), proporcje) },
-                enabled = opcje.firstOrNull { it.klucz == silnik }?.dostepny ?: false,
+                enabled = opcje.firstOrNull { it.klucz == silnik }?.dostepny == true && (silnik != "gemini" || model in modele),
             ) { Text("Wykonaj") }
         },
         dismissButton = {
