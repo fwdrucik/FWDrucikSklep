@@ -332,7 +332,7 @@ class Repozytorium(
         odswiezAdres: (suspend () -> String)? = null,
         model: String = "",
         postep: (String) -> Unit = {},
-    ): Wynik<File> = wywolaj {
+    ): Wynik<File> = wywolajAi {
         val plikWejsciowy = withContext(Dispatchers.IO) {
             val tymczasowy = File.createTempFile("dowarsztatu", ".jpg", kontekst.cacheDir)
             kontekst.contentResolver.openInputStream(zdjecie).use { we ->
@@ -346,38 +346,19 @@ class Repozytorium(
             val czesc = MultipartBody.Part.createFormData(
                 "plik", plikWejsciowy.name, plikWejsciowy.asRequestBody("image/jpeg".toMediaType())
             )
-            // Automatyczny failover miedzy siecia lokalna a Tailscale
-            var zlecenie: OdpowiedzZlecenia? = null
+            // POST dokładnie raz. Przy utracie odpowiedzi zadanie mogło już ruszyć.
+            // Zmiana adresu jest dozwolona wyłącznie przy odczycie stanu GET poniżej.
             var adresTeraz = adres
-            val kandydaci = listOf(
-                adres,
-                if (adres.contains("100.84.198.20")) "http://192.168.0.166:8770" else "http://100.84.198.20:8770"
-            ).distinct()
-
-            var ostatniBladZlecenia: Exception? = null
-            for (kandydat in kandydaci) {
-                try {
-                    val z = warsztat.zlec(
-                        adres = "$kandydat/zlec",
-                        zadanie = pole(zadanie),
-                        opis = pole(opis),
-                        proporcje = pole(
-                            if (proporcje in listOf("16:9", "9:16", "1:1")) proporcje else "16:9"
-                        ),
-                        plik = czesc,
-                        model = model.takeIf { it.isNotBlank() }?.let(::pole),
-                    )
-                    if (z.ok && z.id.isNotBlank()) {
-                        zlecenie = z
-                        adresTeraz = kandydat
-                        break
-                    }
-                } catch (e: Exception) {
-                    ostatniBladZlecenia = e
-                }
-            }
-
-            val zlecenieGotowe = zlecenie ?: throw (ostatniBladZlecenia ?: IOException("Serwer warsztatowy odrzucił zlecenie."))
+            val zlecenieGotowe = warsztat.zlec(
+                adres = "$adres/zlec",
+                zadanie = pole(zadanie),
+                opis = pole(opis),
+                proporcje = pole(proporcje.takeIf { it in listOf("16:9", "9:16", "1:1") } ?: "16:9"),
+                plik = czesc,
+                model = model.takeIf { it.isNotBlank() }?.let(::pole),
+            )
+            if (!zlecenieGotowe.ok || zlecenieGotowe.id.isBlank())
+                throw pl.fwdrucik.sklep.siec.bladOdpowiedziAi(tresc = zlecenieGotowe.blad)
 
             // Limit trzydziestu minut jest hojny celowo: tyle bierze najdłuższa
             // animacja. Przekroczenie znaczy, że coś stanęło, a nie że trwa.
@@ -404,9 +385,13 @@ class Repozytorium(
                     continue
                 }
 
-                postep(stan.stan)
+                postep(when {
+                    stan.gotowe -> "Wynik gotowy. Pobieram plik…"
+                    stan.stan.lowercase() in listOf("queued", "kolejka", "oczekuje") -> "Czekam w kolejce…"
+                    else -> "Usługa pracuje. To może potrwać kilka minut…"
+                })
                 if (stan.gotowe) break
-                stan.blad?.takeIf { it.isNotBlank() }?.let { throw IOException(it) }
+                stan.blad?.takeIf { it.isNotBlank() }?.let { throw pl.fwdrucik.sklep.siec.bladOdpowiedziAi(tresc = it) }
                 if (System.currentTimeMillis() > koniec) {
                     throw IOException("Komputer nie skończył w pół godziny — sprawdź serwer.")
                 }
@@ -478,6 +463,17 @@ class Repozytorium(
      * HttpException, w którym ta treść siedzi w ciele odpowiedzi — bez tego
      * użytkownik zobaczyłby samo "HTTP 422", co nie mówi nic.
      */
+    /** Oddzielna granica dla AI: bez surowych treści serwera i bez powtórnego POST. */
+    private suspend fun <T> wywolajAi(blok: suspend () -> T): Wynik<T> = try {
+        Wynik.Jest(blok())
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        val blad = pl.fwdrucik.sklep.siec.bladAi(e)
+        android.util.Log.w("FW_AI", pl.fwdrucik.sklep.siec.diagnostykaAi("media", blad))
+        Wynik.Blad(blad.message.orEmpty())
+    }
+
     private suspend fun <T> wywolaj(blok: suspend () -> T): Wynik<T> = try {
         Wynik.Jest(blok())
     } catch (e: HttpException) {

@@ -49,3 +49,5 @@ fun OdpowiedzSzkicuAllegro.bladPrywatnegoSzkicu(): String? = when {
     id.isNullOrBlank() && url.isNullOrBlank() -> "Brakuje numeru lub odnośnika do szkicu. Sprawdź Allegro przed ponowieniem."
     else -> null
 }
+
+fun KopiaRobocza.moznaPrzejscDoKroku(krok: Int): Boolean = krok in 1..4

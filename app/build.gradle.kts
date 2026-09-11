@@ -11,7 +11,10 @@ plugins {
 val localProps = Properties()
 rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { localProps.load(it) }
 
-// Numer wersji brany z historii gita, a nie wpisywany recznie.
+// Numer wersji: jawny releaseVersionCode ma pierwszeństwo; domyślnie historia Git i minimum 34.
+// Aktualizacja wymaga większego VC niż poprzednio wydany oraz tego samego podpisu/applicationId.
+// Liczba commitów nie gwarantuje wzrostu na innej gałęzi ani przy kolejnym buildzie bez commita.
+// Kolejne wydanie: -PreleaseVersionCode=N, gdzie N > ostatnio wydany numer (obecnie 34).
 //
 // PO CO: recznie wpisywany numer rozjezdza sie z nazwami paczek w archiwum - po miesiacu
 // nie da sie powiedziec, ktora paczka na telefonie odpowiada ktoremu stanowi kodu. Liczba
@@ -35,6 +38,9 @@ fun zGita(vararg argumenty: String, gdyBrak: String): String = try {
 
 val liczbaCommitow = zGita("rev-list", "--count", "HEAD", gdyBrak = "0").toInt()
 val skrotCommita = zGita("rev-parse", "--short", "HEAD", gdyBrak = "bezgita")
+val kodWydania = providers.gradleProperty("releaseVersionCode").orNull?.let {
+    requireNotNull(it.toIntOrNull()?.takeIf { numer -> numer >= 34 }) { "releaseVersionCode musi być liczbą całkowitą >= 34." }
+} ?: maxOf(34, 10 + liczbaCommitow)
 
 android {
     namespace = "pl.fwdrucik.sklep"
@@ -46,7 +52,7 @@ android {
         // na pulpicie, a nie aktualizacja aplikacji warsztatowej.
         minSdk = 26
         targetSdk = 34
-        versionCode = 10 + liczbaCommitow
+        versionCode = kodWydania
         versionName = "1.$liczbaCommitow+$skrotCommita"
 
         // Adres serwera trzymamy w BuildConfig, żeby test na innym adresie nie

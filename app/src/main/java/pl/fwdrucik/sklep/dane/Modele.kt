@@ -214,6 +214,10 @@ data class KopiaRobocza(
     val modelTekstuAi: String = "auto",
     val modelObrazuAi: String = "auto",
     val modelWideoAi: String = "auto",
+    val proporcjeAi: String = "16:9",
+    val propozycjaOpisu: pl.fwdrucik.sklep.siec.OpisAi? = null,
+    val kadrDoAkceptacji: String = "",
+    val filmDoAkceptacji: String = "",
     val doUzupelnienia: List<String> = emptyList(),
     val zrodloOpisu: String = "",
     val ostrzezenieOpisu: String = "",
@@ -224,7 +228,8 @@ data class KopiaRobocza(
     val pusta: Boolean
         get() = listOf(nazwa, opisKrotki, opis, cena, notatka, zdjecie, animacja,
             material, wymiary, cenaPromo, stan, waga, czas, allegroUrl, allegroId,
-            allegroKategoria.orEmpty()).all { it.isBlank() } && dodatkoweKadry.isEmpty()
+            allegroKategoria.orEmpty(), kadrDoAkceptacji, filmDoAkceptacji).all { it.isBlank() } &&
+            dodatkoweKadry.isEmpty() && propozycjaOpisu == null
 
     /** Także puste pola są świadomą zmianą. Nie zastępuj ich danymi z serwera. */
     fun naProdukt(baza: Produkt): Produkt = baza.copy(

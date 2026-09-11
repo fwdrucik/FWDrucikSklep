@@ -165,9 +165,10 @@ fun EkranKreatora(
     var modelTekstuAi by rememberSaveable(p.id) { mutableStateOf(kopia?.modelTekstuAi ?: "auto") }
     var modelObrazuAi by rememberSaveable(p.id) { mutableStateOf(kopia?.modelObrazuAi ?: "auto") }
     var modelWideoAi by rememberSaveable(p.id) { mutableStateOf(kopia?.modelWideoAi ?: "auto") }
+    var proporcjeAi by rememberSaveable(p.id) { mutableStateOf(kopia?.proporcjeAi?.takeIf { it in listOf("16:9", "9:16", "1:1") } ?: "16:9") }
     var zrodloOpisu by rememberSaveable(p.id) { mutableStateOf(kopia?.zrodloOpisu.orEmpty()) }
     var ostrzezenieOpisu by rememberSaveable(p.id) { mutableStateOf(kopia?.ostrzezenieOpisu.orEmpty()) }
-    var propozycjaOpisu by remember { mutableStateOf<pl.fwdrucik.sklep.siec.OpisAi?>(null) }
+    var propozycjaOpisu by remember(p.id) { mutableStateOf(kopia?.propozycjaOpisu) }
     LaunchedEffect(Unit) { naOdswiezModeleAi() }
 
     var nazwa by rememberSaveable(p.id) {
@@ -299,8 +300,8 @@ fun EkranKreatora(
     // kadrze to wygoda, przy nieudanym strata: oryginal znikal z pola widzenia,
     // a jedyna droga powrotu byla przez „przed/po". Teraz kazdy wynik zatrzymuje
     // sie na pytaniu — glowne, kolejne w galerii, albo kosz.
-    var swiezyKadr by remember(p.id) { mutableStateOf<Uri?>(null) }
-    var swiezaAnimacja by remember(p.id) { mutableStateOf<Uri?>(null) }
+    var swiezyKadr by remember(p.id) { mutableStateOf(kopia?.kadrDoAkceptacji?.takeIf { it.isNotBlank() }?.let { if (it.startsWith("/")) Uri.fromFile(java.io.File(it)) else Uri.parse(it) }) }
+    var swiezaAnimacja by remember(p.id) { mutableStateOf(kopia?.filmDoAkceptacji?.takeIf { it.isNotBlank() }?.let { if (it.startsWith("/")) Uri.fromFile(java.io.File(it)) else Uri.parse(it) }) }
 
     // Zdjecie glowne wczytujemy same, przy wejsciu w ekran.
     //
@@ -401,6 +402,8 @@ fun EkranKreatora(
         trybProsty = trybProsty, krokAsystenta = krokAsystenta,
         material = material, wymiary = wymiary,
         modelTekstuAi = modelTekstuAi, modelObrazuAi = modelObrazuAi, modelWideoAi = modelWideoAi,
+        proporcjeAi = proporcjeAi, propozycjaOpisu = propozycjaOpisu,
+        kadrDoAkceptacji = adresKopii(swiezyKadr), filmDoAkceptacji = adresKopii(swiezaAnimacja),
         doUzupelnienia = doUzupelnienia, zrodloOpisu = zrodloOpisu, ostrzezenieOpisu = ostrzezenieOpisu,
     )
     LaunchedEffect(biezaca) { naZapiszKopie(biezaca) }
@@ -563,6 +566,12 @@ fun EkranKreatora(
         DialogZadaniaAi(
             zadanie, katalogAi, katalogAiWToku, bladKataloguAi,
             modelTekstuAi, modelObrazuAi, modelWideoAi,
+            proporcje = proporcjeAi, naProporcje = { proporcjeAi = it },
+            daneOpisu = pl.fwdrucik.sklep.siec.DaneOpisuAi(
+                notatka = listOf(notatka, if (zadanie == "poprawa-opisu") opisKrotki + "\n" + opis else "").joinToString("\n"),
+                nazwa = nazwa, material = material, wymiary = wymiary, model = modelTekstuAi,
+            ),
+            maZdjecie = lokalneZdjecie != null,
             naModel = { rodzaj, id ->
                 when (rodzaj) {
                     "tekst" -> modelTekstuAi = id
@@ -600,7 +609,7 @@ fun EkranKreatora(
                             else -> poleceniObrotu(coTo)
                         }
                         naZlecModelem(
-                            if (zadanie == "animacja") "animacja" else "zdjecie-produktowe",
+                            if (zadanie == "animacja") "animacja-szybka" else "zdjecie-produktowe",
                             foto, listOf(polecenie, dodatkowe).filter { it.isNotBlank() }.joinToString(", "),
                             proporcje, if (zadanie == "animacja") modelWideoAi else modelObrazuAi,
                         ) { wynik -> if (zadanie == "animacja") swiezaAnimacja = wynik else swiezyKadr = wynik }
@@ -788,7 +797,7 @@ fun EkranKreatora(
                     nazwa = it.nazwa; notatka = it.notatka; opisKrotki = it.opisKrotki; opis = it.opis
                     material = it.material; wymiary = it.wymiary; cena = it.cena
                     modelTekstuAi = it.modelTekstuAi; krokAsystenta = it.krokAsystenta
-                    modelObrazuAi = it.modelObrazuAi; modelWideoAi = it.modelWideoAi
+                    modelObrazuAi = it.modelObrazuAi; modelWideoAi = it.modelWideoAi; proporcjeAi = it.proporcjeAi
                     allegroCena = it.allegroCena; allegroKategoria = it.allegroKategoria.orEmpty(); stan = it.stan
                     allegroKategoriaNazwa = it.allegroKategoriaNazwa; allegroKategoriaSciezka = it.allegroKategoriaSciezka
                 },
@@ -806,12 +815,12 @@ fun EkranKreatora(
                 naOdswiezModele = naOdswiezModeleAi,
                 naPoprawTloISwiatlo = {
                     lokalneZdjecie?.let { foto ->
-                        naZlecModelem("zdjecie-produktowe", foto, Polecenia.tloISwiatlo(nazwa.ifBlank { notatka }), "16:9", modelObrazuAi) { swiezyKadr = it }
+                        naZlecModelem("zdjecie-produktowe", foto, Polecenia.tloISwiatlo(nazwa.ifBlank { notatka }), proporcjeAi, modelObrazuAi) { swiezyKadr = it }
                     }
                 },
                 naAnimuj = {
                     lokalneZdjecie?.let { foto ->
-                        naZlecModelem("animacja", foto, Polecenia.obrot(nazwa.ifBlank { notatka }), "16:9", modelWideoAi) { swiezaAnimacja = it }
+                        naZlecModelem("animacja-szybka", foto, Polecenia.obrot(nazwa.ifBlank { notatka }), proporcjeAi, modelWideoAi) { swiezaAnimacja = it }
                     }
                 },
                 postep = postepPracy, bladOperacji = bladPracy,

@@ -147,7 +147,7 @@ class AiKontraktTest {
     @Test fun odrzucenieKonkretnegoModeluNieUruchamiaDrugiegoZapytania() = runBlocking {
         odpowiedz("""{"ok":false,"blad":"Wybrany model jest niedostępny","do_uzupelnienia":[]}""")
         val blad = runCatching { ai.opis(base, DaneOpisuAi(notatka = "miska", model = "local:wylaczony")) }.exceptionOrNull()
-        assertEquals("Wybrany model jest niedostępny", blad?.message)
+        assertTrue(blad?.message.orEmpty().contains("Wybrany model jest niedostępny"))
         assertEquals(1, serwer.requestCount)
     }
 

@@ -124,11 +124,7 @@ class SklepAplikacja : Application(), ImageLoaderFactory {
         //
         // Krotkie limity czasu: gdy komputer jest wylaczony, telefon ma sie
         // dowiedziec o tym w sekunde, a nie wisiec pol minuty na kropce stanu.
-        val klientWarsztatu = OkHttpClient.Builder()
-            .connectTimeout(4, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
-            .writeTimeout(180, TimeUnit.SECONDS)
-            .build()
+        val klientWarsztatu = pl.fwdrucik.sklep.siec.klientWarsztatu()
 
         warsztat = Retrofit.Builder()
             // Adres bazowy jest atrapa — kazde wywolanie podaje pelny adres

@@ -19,6 +19,8 @@ import coil.compose.AsyncImage
 import pl.fwdrucik.sklep.dane.KopiaRobocza
 import pl.fwdrucik.sklep.dane.zloteNaGrosze
 import pl.fwdrucik.sklep.dane.brakiSzkicuAllegro
+import pl.fwdrucik.sklep.dane.moznaPrzejscDoKroku
+import pl.fwdrucik.sklep.siec.DaneOpisuAi
 import pl.fwdrucik.sklep.narzedzia.AllegroFormat
 import pl.fwdrucik.sklep.siec.KatalogAi
 import pl.fwdrucik.sklep.siec.kosztPoPolsku
@@ -79,6 +81,8 @@ fun AsystentSklepu(
     }
     val krok = dane.krokAsystenta.coerceIn(1, 4)
     val brakiAllegro = dane.brakiSzkicuAllegro()
+    val daneOpisu = DaneOpisuAi(dane.notatka, dane.nazwa, dane.material, dane.wymiary, dane.modelTekstuAi)
+    val blokadaOpisu = katalog.powodBlokadyOpisu(daneOpisu, zdjecie != null)
     val glosIntent = remember {
         Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -98,6 +102,16 @@ fun AsystentSklepu(
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Dodaj wyrób krok po kroku", style = MaterialTheme.typography.titleLarge)
         Text("Nie musisz pisać poprawnie. Kilka słów wystarczy.")
+        Text("Wybierz, co chcesz zrobić. Opis, zdjęcie i film nie wymagają ukończenia poprzedniego kroku.")
+        listOf(listOf(1 to "Zdjęcie i słowa", 2 to "Opis"), listOf(3 to "Zdjęcie i film", 4 to "Cena i podgląd")).forEach { rzad ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                rzad.forEach { (numer, tytul) ->
+                    FilterChip(selected = krok == numer, onClick = { naZmien(dane.copy(krokAsystenta = numer)) },
+                        enabled = dane.moznaPrzejscDoKroku(numer), modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                        label = { Text(tytul) })
+                }
+            }
+        }
         Text("Krok $krok z 4", style = MaterialTheme.typography.labelLarge)
         if (zajety) {
             LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -137,9 +151,11 @@ fun AsystentSklepu(
                 }
                 if (ustawieniaTekstu) WyborModeluAi("tekst", dane.modelTekstuAi, katalog, katalogWToku, bladKatalogu, naOdswiezModele) { naZmien(dane.copy(modelTekstuAi = it)) }
                 else Text(podsumowanieModelu("tekst", dane.modelTekstuAi, katalog), style = MaterialTheme.typography.bodySmall)
-                Button(onClick = naOpis, enabled = !zajety && !katalogWToku && katalog.moznaWybrac(dane.modelTekstuAi, "tekst") &&
-                    (zdjecie != null || listOf(dane.notatka, dane.nazwa, dane.material, dane.wymiary).any { it.isNotBlank() }), modifier = Modifier.fillMaxWidth()) {
-                    Text(if (zajety) "Układam opis…" else "Ułóż opis z moich słów")
+                InformacjaOWysylceAi("tekst", dane.modelTekstuAi, katalog, zdjecie != null)
+                blokadaOpisu?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                if (blokadaOpisu != null) TextButton(onClick = { naZmien(dane.copy(krokAsystenta = 1)) }) { Text("Dodaj kilka słów") }
+                Button(onClick = naOpis, enabled = !zajety && !katalogWToku && blokadaOpisu == null, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                    Text("Przygotuj opis")
                 }
                 OutlinedTextField(dane.nazwa, { naZmien(dane.copy(nazwa = it)) }, label = { Text("Nazwa wyrobu") }, enabled = !zajety, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(dane.opisKrotki, { naZmien(dane.copy(opisKrotki = it)) }, label = { Text("Opis w jednym zdaniu") }, enabled = !zajety, modifier = Modifier.fillMaxWidth())
@@ -147,16 +163,19 @@ fun AsystentSklepu(
                 dane.doUzupelnienia.forEach { Text("Do sprawdzenia: ${pytanieOBrakujacyFakt(it)}") }
                 if (dane.zrodloOpisu.isNotBlank()) Text(dane.zrodloOpisu, style = MaterialTheme.typography.bodySmall)
                 if (dane.ostrzezenieOpisu.isNotBlank()) Text(dane.ostrzezenieOpisu, color = MaterialTheme.colorScheme.error)
-                Button(onClick = { naZmien(dane.copy(krokAsystenta = 3)) }, enabled = !zajety && dane.nazwa.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Dalej: zdjęcie i krótki film") }
+                Button(onClick = { naZmien(dane.copy(krokAsystenta = 3)) }, enabled = dane.moznaPrzejscDoKroku(3), modifier = Modifier.fillMaxWidth()) { Text("Przejdź do zdjęcia i filmu") }
             }
             3 -> {
                 Text("3. Zdjęcie i krótki film", style = MaterialTheme.typography.titleMedium)
                 Text("Opcjonalnie. Możesz zostawić swoje zdjęcie i pominąć film.")
                 zdjecie?.let { AsyncImage(it, "Zdjęcie używane do poprawy i filmu", Modifier.fillMaxWidth().heightIn(max = 240.dp)) }
                 if (zdjecie == null) Text("Najpierw dodaj zdjęcie w kroku 1 albo pomiń ten krok.")
+                WyborProporcjiAi(dane.proporcjeAi, !zajety) { naZmien(dane.copy(proporcjeAi = it)) }
+                InformacjaOWysylceAi("obraz", dane.modelObrazuAi, katalog, zdjecie != null)
                 Button(onClick = naPoprawTloISwiatlo, enabled = !zajety && zdjecie != null && !katalogWToku && katalog.moznaWybrac(dane.modelObrazuAi, "obraz"),
                     modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Popraw tło i światło") }
                 Text(podsumowanieModelu("obraz", dane.modelObrazuAi, katalog), style = MaterialTheme.typography.bodySmall)
+                InformacjaOWysylceAi("wideo", dane.modelWideoAi, katalog, zdjecie != null)
                 Button(onClick = naAnimuj, enabled = !zajety && zdjecie != null && !katalogWToku && katalog.moznaWybrac(dane.modelWideoAi, "wideo"),
                     modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text("Zrób krótki film ze zdjęcia") }
                 Text(podsumowanieModelu("wideo", dane.modelWideoAi, katalog), style = MaterialTheme.typography.bodySmall)
@@ -239,8 +258,8 @@ fun AsystentSklepu(
 }
 
 private fun podsumowanieModelu(rodzaj: String, id: String, katalog: KatalogAi): String {
-    if (id == "auto") return if (rodzaj == "tekst") "Automatycznie — bezpłatna lub lokalna droga warsztatu."
-        else "Automatycznie — domyślna droga warsztatu. Może korzystać z abonamentu lub płatnej usługi."
+    if (id == "auto") return if (rodzaj == "tekst") "Automatycznie: ChatGPT, potem komputer. Obowiązują limity konta."
+        else "Automatycznie: Flow. Obowiązują limity lub koszt wybranej usługi."
     val model = katalog.dla(rodzaj).firstOrNull { it.id == id }
         ?: return "Wybrany model wymaga sprawdzenia. Rozwiń wybór modeli."
     return "${model.nazwa}: ${kosztPoPolsku(model.koszt)}. " + if (katalog.ok && model.dostepny) "Dostępny."

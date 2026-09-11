@@ -16,6 +16,10 @@ import kotlinx.coroutines.CancellationException
 import pl.fwdrucik.sklep.siec.KatalogAi
 import pl.fwdrucik.sklep.siec.DaneOpisuAi
 import pl.fwdrucik.sklep.siec.OpisAi
+import pl.fwdrucik.sklep.siec.BladAi
+import pl.fwdrucik.sklep.siec.bladAi
+import pl.fwdrucik.sklep.siec.diagnostykaAi
+import pl.fwdrucik.sklep.siec.nazwaHistoriiAi
 import pl.fwdrucik.sklep.SklepAplikacja
 import pl.fwdrucik.sklep.dane.Produkt
 import pl.fwdrucik.sklep.dane.SzkicProduktu
@@ -245,8 +249,8 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _stan.update { it.copy(katalogAi = KatalogAi(), bladKatalogu =
-                    "Nie można pobrać listy modeli. Sprawdź połączenie z warsztatem i odśwież listę. Możesz dalej pisać ręcznie.") }
+                android.util.Log.w("FW_AI", diagnostykaAi("modele", e))
+                _stan.update { it.copy(katalogAi = KatalogAi(), bladKatalogu = bladAi(e).message) }
             } finally {
                 _stan.update { it.copy(katalogWToku = false) }
             }
@@ -270,11 +274,13 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
             try {
                 val adres = adresRoboczy()
                 sprawdzModelAi(adres, dane.model, "tekst")
-                val tylkoSlowa = zdjecie != null && dane.model != "auto" &&
-                    _stan.value.katalogAi.dla("tekst").firstOrNull { it.id == dane.model }?.vision == false
-                require(!tylkoSlowa || dane.maFakty()) {
-                    "Ten model nie odczytuje zdjęć. Dopisz kilka słów lub wybierz model, który odczytuje zdjęcia."
+                if (zdjecie != null && dane.model == "auto") {
+                    val aktualny = repozytorium.modeleAi(adres)
+                    _stan.update { it.copy(katalogAi = aktualny) }
                 }
+                val katalog = _stan.value.katalogAi
+                katalog.powodBlokadyOpisu(dane, zdjecie != null)?.let { throw BladAi(it) }
+                val tylkoSlowa = zdjecie != null && !katalog.czyCzytaZdjecie(dane.model)
                 val opis = repozytorium.opisAi(adres, if (tylkoSlowa) null else zdjecie, dane)
                 gotowe(if (tylkoSlowa) opis.copy(ostrzezenie = listOf("Ten model ułożył opis tylko z podanych słów. Nie oglądał zdjęcia.",
                     opis.ostrzezenie.orEmpty()).filter { it.isNotBlank() }.joinToString(" ")) else opis)
@@ -287,10 +293,8 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _stan.update { it.copy(blad = if (e is retrofit2.HttpException)
-                    "Serwer nie przygotował opisu. Sprawdź połączenie i obsługę asystenta w warsztacie."
-                    else if (e is java.io.IOException) "Brak połączenia z warsztatem. Twoje słowa pozostały w szkicu. Spróbuj ponownie."
-                    else e.message ?: "Opis nie powstał. Spróbuj ponownie.") }
+                android.util.Log.w("FW_AI", diagnostykaAi("opis", e))
+                _stan.update { it.copy(blad = bladAi(e).message) }
             } finally {
                 _stan.update { it.copy(agentPracuje = false) }
             }
@@ -333,6 +337,8 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                     zdjecie = zachowajZdjecie(kopia.id, kopia.zdjecie),
                     dodatkoweKadry = kopia.dodatkoweKadry.map { zachowajZdjecie(kopia.id, it) },
                     animacja = zachowajZdjecie(kopia.id, kopia.animacja),
+                    kadrDoAkceptacji = zachowajZdjecie(kopia.id, kopia.kadrDoAkceptacji),
+                    filmDoAkceptacji = zachowajZdjecie(kopia.id, kopia.filmDoAkceptacji),
                     zapisano = System.currentTimeMillis(),
                 )
             )
@@ -914,8 +920,8 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
             _stan.update { it.copy(blad = "Brak adresu serwera warsztatowego. Ustaw go w Pomocy.") }
             return
         }
+        _stan.update { it.copy(agentPracuje = true, blad = null, komunikat = "Wysyłam do wybranej usługi…") }
         viewModelScope.launch {
-            _stan.update { it.copy(agentPracuje = true, komunikat = "Wysyłam na komputer...") }
             try {
                 // Adres sprawdzamy TUZ przed wyslaniem, nie bierzemy tego sprzed
                 // ostatniego odpytania kontrolki — inaczej robota idzie jedna siecia,
@@ -928,16 +934,8 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                     // o adres jeszcze raz — po zmianie Wi-Fi bywa już inny.
                     odswiezAdres = { adresRoboczy() },
                     model = model,
-                ) { etap -> _stan.update { it.copy(komunikat = "Komputer: $etap") } }
-                val nazwaZadania = when (zadanie) {
-                    "animacja" -> "Animacja (karta)"
-                    "animacja-flow" -> "Animacja (Veo)"
-                    "animacja-meta" -> "Animacja (Meta AI, $proporcje)"
-                    "zdjecie-flow" -> "Poprawa zdjęcia (Flow)"
-                    "zdjecie-meta" -> "Kadr z Meta AI ($proporcje)"
-                    "zdjecie-copilot" -> "Kadr z Copilot ($proporcje)"
-                    else -> "Poprawa zdjęcia (Forge)"
-                }
+                ) { etap -> _stan.update { it.copy(komunikat = "Zadanie: $etap") } }
+                val nazwaZadania = nazwaHistoriiAi(zadanie, model, _stan.value.katalogAi)
                 when (w) {
                     is Wynik.Jest -> {
                         pl.fwdrucik.sklep.narzedzia.GaleriaZapis.zapiszDoGalerii(
@@ -955,12 +953,15 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                         _stan.update { it.copy(komunikat = "Gotowe — wynik zapisano w galerii. Sprawdź go i zdecyduj, czy użyć w produkcie.") }
                     }
                     is Wynik.Blad -> {
-                        dopiszCzynnosc(nazwaZadania, "komputer w warsztacie", w.komunikat.take(90), udana = false)
+                        dopiszCzynnosc(nazwaZadania, "wybrana usługa", w.komunikat.take(90), udana = false)
                         _stan.update { it.copy(blad = w.komunikat) }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _stan.update { it.copy(blad = e.message ?: "Błąd połączenia z warsztatem") }
+                android.util.Log.w("FW_AI", diagnostykaAi("media", e))
+                _stan.update { it.copy(blad = bladAi(e).message) }
             } finally {
                 _stan.update { it.copy(agentPracuje = false) }
             }
@@ -1006,7 +1007,7 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
             sprawdzModelAi(adres, modelWideo, "wideo")
 
             // --- krok 1: tło
-            val silnikTla = wybranySilnik
+            val silnikTla = nazwaHistoriiAi("zdjecie-produktowe", modelObrazu, _stan.value.katalogAi)
             val zadanieTla = when (wybranySilnik) {
                 "meta" -> "zdjecie-meta"
                 "flow" -> "zdjecie-flow"
@@ -1033,7 +1034,7 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
 
             // --- krok 2: upiększanie
             _stan.update { it.copy(komunikat = "Krok 2 z 3: poprawiam światło...") }
-            val silnikSwiatla = wybranySilnik
+            val silnikSwiatla = nazwaHistoriiAi("zdjecie-produktowe", modelObrazu, _stan.value.katalogAi)
             val zadanieSwiatla = when (wybranySilnik) {
                 "meta" -> "zdjecie-meta"
                 "flow" -> "zdjecie-flow"
@@ -1075,12 +1076,13 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
 
             // --- krok 3: animacja
             _stan.update { it.copy(komunikat = "Krok 3 z 3: animuję (to potrwa)...") }
-            val silnikRuchu = wybranySilnik
+            val silnikRuchu = nazwaHistoriiAi("animacja-szybka", modelWideo, _stan.value.katalogAi)
             val zadanieRuchu = when (wybranySilnik) {
                 "meta" -> "animacja-meta"
                 "flow" -> "animacja-flow"
                 "gemini" -> "animacja-gemini"
                 "forge", "comfy" -> "animacja"
+                "auto" -> "animacja-szybka"
                 else -> "animacja"
             }
             val poRuchu = repozytorium.zlecWarsztatowi(
@@ -1111,7 +1113,8 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _stan.update { it.copy(blad = "Nie udało się wykonać całego ciągu. Sprawdź modele i połączenie z warsztatem.") }
+                android.util.Log.w("FW_AI", diagnostykaAi("media", e))
+                _stan.update { it.copy(blad = bladAi(e).message) }
             } finally {
                 _stan.update { it.copy(agentPracuje = false) }
             }

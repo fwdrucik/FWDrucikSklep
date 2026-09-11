@@ -29,8 +29,8 @@ fun WyborModeluAi(
         Text("$etykieta: " + if (wybrany == "auto") "Automatycznie" else pozycja?.nazwa ?: "Model wymaga sprawdzenia")
     }
     Text(
-        if (wybrany == "auto") if (rodzaj == "tekst") "Automatycznie: bezpłatna lub lokalna droga. Dostępność sprawdza warsztat."
-            else "Automatycznie: domyślna droga warsztatu. Koszt zależy od usługi."
+        if (wybrany == "auto") if (rodzaj == "tekst") "Automatycznie: najpierw ChatGPT, potem komputer. Bez automatycznego OpenRouter. Obowiązują limity konta."
+            else "Automatycznie: Flow. Obowiązują limity lub koszt usługi."
         else pozycja?.let { "Koszt: ${kosztPoPolsku(it.koszt)}. " + if (it.dostepny) "Dostępny." else "Niedostępny: ${it.powod}" }
             ?: "Ten model nie jest już na liście. Wybierz inny lub Automatycznie.",
         style = MaterialTheme.typography.bodySmall,
@@ -42,8 +42,8 @@ fun WyborModeluAi(
         text = {
             Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
                 Text("Lista i koszty pochodzą z warsztatu. Płatne API lub abonament mogą wymagać opłat.")
-                WierszModelu("Automatycznie", if (rodzaj == "tekst") "Bezpłatna lub lokalna droga; gdy brak dostępnej — zobaczysz błąd."
-                    else "Domyślna droga warsztatu. Nie oznacza, że każda usługa jest bezpłatna.",
+                WierszModelu("Automatycznie", if (rodzaj == "tekst") "ChatGPT, potem komputer. Gdy brak dostępnej drogi — zobaczysz błąd."
+                    else "Flow. Nie oznacza, że usługa jest bezpłatna lub bez limitu.",
                     wybrany == "auto", true) { naWybierz("auto"); otwarte = false }
                 if (wToku) {
                     LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -89,13 +89,16 @@ fun DialogZadaniaAi(
     modelTekstu: String,
     modelObrazu: String,
     modelWideo: String,
+    proporcje: String,
+    daneOpisu: pl.fwdrucik.sklep.siec.DaneOpisuAi,
+    maZdjecie: Boolean,
+    naProporcje: (String) -> Unit,
     naModel: (String, String) -> Unit,
     naOdswiez: () -> Unit,
     naAnuluj: () -> Unit,
     naWykonaj: (String, String) -> Unit,
 ) {
     var dodatkowe by rememberSaveable { mutableStateOf("") }
-    var proporcje by rememberSaveable { mutableStateOf("16:9") }
     val rodzaje = when (zadanie) {
         "opis", "poprawa-opisu" -> listOf("tekst")
         "auto-ciag" -> listOf("obraz", "wideo")
@@ -103,6 +106,9 @@ fun DialogZadaniaAi(
         else -> listOf("obraz")
     }
     fun model(rodzaj: String) = when (rodzaj) { "tekst" -> modelTekstu; "obraz" -> modelObrazu; else -> modelWideo }
+    val blokadaOpisu = if ("tekst" in rodzaje) katalog.powodBlokadyOpisu(
+        daneOpisu.copy(notatka = listOf(daneOpisu.notatka, dodatkowe).joinToString(" "), model = modelTekstu), maZdjecie
+    ) else null
     AlertDialog(
         onDismissRequest = naAnuluj,
         title = { Text(when (zadanie) {
@@ -117,23 +123,47 @@ fun DialogZadaniaAi(
             Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 rodzaje.forEach { rodzaj ->
                     WyborModeluAi(rodzaj, model(rodzaj), katalog, wToku, blad, naOdswiez) { naModel(rodzaj, it) }
+                    InformacjaOWysylceAi(rodzaj, model(rodzaj), katalog, maZdjecie)
                 }
                 OutlinedTextField(dodatkowe, { dodatkowe = it }, label = { Text("Dodatkowa prośba (możesz pominąć)") })
+                blokadaOpisu?.let { Text(it) }
                 if ("tekst" !in rodzaje) {
-                    Text("Kształt zdjęcia lub filmu")
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("16:9" to "Poziomo", "9:16" to "Pionowo", "1:1" to "Kwadrat").forEach { (id, nazwa) ->
-                            FilterChip(proporcje == id, { proporcje = id }, label = { Text(nazwa) })
-                        }
-                    }
+                    WyborProporcjiAi(proporcje, !wToku, naProporcje)
                 }
             }
         },
         confirmButton = {
-            Button(onClick = { naWykonaj(dodatkowe, proporcje) }, enabled = !wToku && rodzaje.all { katalog.moznaWybrac(model(it), it) }) {
+            Button(onClick = { naWykonaj(dodatkowe, proporcje) }, enabled = !wToku && blokadaOpisu == null && rodzaje.all { katalog.moznaWybrac(model(it), it) }) {
                 Text("Wykonaj")
             }
         },
         dismissButton = { TextButton(onClick = naAnuluj) { Text("Anuluj") } },
     )
+}
+
+/** Jeden format współdzielony przez oba tryby i zapisany w kopii roboczej. */
+@Composable
+fun WyborProporcjiAi(proporcje: String, dostepny: Boolean, naWybierz: (String) -> Unit) {
+    Text("Kształt zdjęcia i filmu")
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf("16:9" to "Poziomo", "9:16" to "Pionowo", "1:1" to "Kwadrat").forEach { (id, nazwa) ->
+            FilterChip(proporcje == id, { naWybierz(id) }, enabled = dostepny, label = { Text(nazwa) })
+        }
+    }
+}
+
+@Composable
+fun InformacjaOWysylceAi(rodzaj: String, id: String, katalog: KatalogAi, maZdjecie: Boolean) {
+    val nazwa = katalog.modele.firstOrNull { it.id == id }?.nazwa.orEmpty().ifBlank { "wybranego dostawcy" }
+    val odbiorca = when {
+        id == "auto" && rodzaj == "tekst" -> "ChatGPT w chmurze; gdy nie jest dostępny — komputer"
+        id == "auto" -> "Flow w chmurze"
+        id.startsWith("local:") -> "$nazwa na komputerze"
+        else -> "$nazwa (wybrana usługa)"
+    }
+    val tylkoSlowa = rodzaj == "tekst" && !katalog.czyCzytaZdjecie(id)
+    val co = if (maZdjecie && !tylkoSlowa) "Zdjęcie wyrobu i wpisane słowa" else "Wpisane słowa"
+    Text("$co zostaną wysłane po naciśnięciu przycisku: $odbiorca. Mogą obowiązywać limity konta lub opłaty usługi. Aplikacja niczego nie kupuje.",
+        style = MaterialTheme.typography.bodySmall)
+    if (maZdjecie && tylkoSlowa) Text("Odczyt zdjęcia nie jest potwierdzony — opis powstanie tylko z Twoich słów. Zdjęcie zostaje w szkicu.", style = MaterialTheme.typography.bodySmall)
 }
