@@ -54,6 +54,9 @@ class SklepAplikacja : Application(), ImageLoaderFactory {
     lateinit var warsztat: SerwerWarsztatu
         private set
 
+    lateinit var kontrolkaWarsztatu: pl.fwdrucik.sklep.siec.KontrolkaWarsztatu
+        private set
+
     /** Wystawiony osobno, bo kontrolka w Pomocy sprawdza klucz bez udziału agenta. */
     lateinit var gemini: GeminiApi
         private set
@@ -134,6 +137,13 @@ class SklepAplikacja : Application(), ImageLoaderFactory {
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
             .create(SerwerWarsztatu::class.java)
+
+        kontrolkaWarsztatu = Retrofit.Builder()
+            .baseUrl("http://127.0.0.1/")
+            .client(pl.fwdrucik.sklep.siec.klientKontrolkiWarsztatu())
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(pl.fwdrucik.sklep.siec.KontrolkaWarsztatu::class.java)
 
         // Agent dostaje OBA silniki: Gemini czyta zdjecie, Muse pisze tekst
         // przez most na komputerze, gdy klucza Gemini brak albo zostal odrzucony.

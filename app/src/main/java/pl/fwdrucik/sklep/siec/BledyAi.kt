@@ -61,11 +61,13 @@ fun bladAi(blad: Throwable): BladAi = when (blad) {
 
 /** Log whitelist: żadnych message, cause, URL, stacktrace ani ciała HTTP. */
 fun diagnostykaAi(operacja: String, blad: Throwable): String {
-    val nazwa = operacja.takeIf { it in setOf("opis", "modele", "media") } ?: "ai"
+    val nazwa = operacja.takeIf { it in setOf("opis", "modele", "media", "stan") } ?: "ai"
     val status = when (blad) { is BladAi -> blad.http; is HttpException -> blad.code(); else -> null }
     val klasa = when (blad) {
         is BladAi -> blad.klasa.takeIf { it in setOf("BladAi", "HttpException", "SocketTimeoutException", "IOException", "IllegalArgumentException", "Exception") } ?: "BladAi"
         is HttpException -> "HttpException"
+        is kotlinx.serialization.SerializationException -> "SerializationException"
+        is java.net.ConnectException -> "ConnectException"
         is SocketTimeoutException -> "SocketTimeoutException"
         is IOException -> "IOException"
         is IllegalArgumentException -> "IllegalArgumentException"

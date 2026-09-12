@@ -55,6 +55,14 @@ class AiBledyTest {
         assertFalse(e.message.orEmpty().contains("PRIVATE"))
         assertTrue(e.message.orEmpty().contains("usług"))
     }
+    @Test fun diagnostykaStanuOdróżniaFormatOdSieciBezTajnychDanych() {
+        val format = diagnostykaAi("stan", kotlinx.serialization.SerializationException("PRIVATE_BODY"))
+        assertEquals("operation=stan http=- class=SerializationException", format)
+        assertEquals("operation=stan http=- class=ConnectException",
+            diagnostykaAi("stan", java.net.ConnectException("PRIVATE_HOST")))
+        assertEquals("operation=ai http=- class=Exception",
+            diagnostykaAi("PRIVATE_OPERATION", Exception("PRIVATE_BODY")))
+    }
     @Test fun diagnostykaMaTylkoStatusKlaseIOperacje() {
         val e = blad(429, """{"ok":false,"blad":"PRIVATE_BODY"}""")
         val log = diagnostykaAi("opis", e)

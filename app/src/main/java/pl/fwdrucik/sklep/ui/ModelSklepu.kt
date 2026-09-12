@@ -203,6 +203,7 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
     private val agent = SklepAplikacja.z(aplikacja).agent
     private val ustawienia = SklepAplikacja.z(aplikacja).ustawienia
     private val warsztat = SklepAplikacja.z(aplikacja).warsztat
+    private val kontrolkaWarsztatu = SklepAplikacja.z(aplikacja).kontrolkaWarsztatu
     private val gemini = SklepAplikacja.z(aplikacja).gemini
 
     private val _stan = MutableStateFlow(StanEkranu(zalogowany = repozytorium.czyZalogowany()))
@@ -817,8 +818,11 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
         var ostatniBlad: Exception? = null
         for (adres in kandydaci) {
             try {
-                return adres to warsztat.stan("$adres/stan")
+                return adres to kontrolkaWarsztatu.stan("$adres/stan")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                android.util.Log.w("FW_STAN", diagnostykaAi("stan", e))
                 ostatniBlad = e
             }
         }
