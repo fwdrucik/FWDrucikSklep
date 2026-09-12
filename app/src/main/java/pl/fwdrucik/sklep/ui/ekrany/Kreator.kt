@@ -1,6 +1,7 @@
 package pl.fwdrucik.sklep.ui.ekrany
 
 import android.net.Uri
+import androidx.compose.runtime.MutableState
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -93,6 +94,13 @@ import pl.fwdrucik.sklep.siec.pytanieOBrakujacyFakt
  * serwer dopiero po zapisaniu produktu — serwer przypina pliki do istniejącego
  * wyrobu. Ta kolejność jest ukryta w modelu, nie obciąża użytkownika.
  */
+/** Ten sam stan zapytania dla wyników w obu trybach kreatora. */
+@Composable
+internal fun pamietajZapytanieWyceny(produktId: Int): MutableState<String> =
+    rememberSaveable(produktId) { mutableStateOf("") }
+
+internal fun MutableState<String>.pasujeDoZapytania(klucz: String): Boolean = value == klucz
+
 @Composable
 fun EkranKreatora(
     istniejacy: Produkt?,
@@ -137,10 +145,11 @@ fun EkranKreatora(
     sugerowanaCenaAllegro: Double? = null,
     minCenaRynkowa: Double? = null,
     maxCenaRynkowa: Double? = null,
-    /** Czy kwoty pochodzÄ… ze zmierzonych ofert Allegro, czy z tabeli awaryjnej. */
+    /** Czy rekomendacja przeszła walidację źródeł w odpowiedzi serwera. */
     wycenaZmierzona: Boolean = false,
-    /** TreĹ›Ä‡ ostrzeĹĽenia, gdy kwota jest szacunkiem. */
+    /** Ostrzeżenie jest widoczne także przy poprawnej rekomendacji. */
     ostrzezenieWyceny: String? = null,
+    sprawdzonoWyceny: String = "",
     ofertyRynkowe: List<pl.fwdrucik.sklep.siec.OfertaCenowa> = emptyList(),
     naZbadajCeneRynkowa: ((String, String, (Double, Double, Double, Double) -> Unit) -> Unit)? = null,
     naUtworzSzkicAllegro: ((String, String, Double, String, String, Int, (Boolean, String?) -> Unit) -> Unit)? = null,
@@ -241,22 +250,30 @@ fun EkranKreatora(
     var allegroKategoriaNazwa by rememberSaveable(p.id) { mutableStateOf(kopia?.allegroKategoriaNazwa.orEmpty()) }
     var allegroKategoriaSciezka by rememberSaveable(p.id) { mutableStateOf(kopia?.allegroKategoriaSciezka.orEmpty()) }
     var komunikatAllegro by rememberSaveable(p.id) { mutableStateOf<String?>(null) }
-    var zapytanieProstejWyceny by remember(p.id) { mutableStateOf("") }
+    val pamiecWyceny = pamietajZapytanieWyceny(p.id)
+    var zapytanieWyceny by pamiecWyceny
+    // Wspólne zapytanie obu trybów: tylko jawna nazwa i publiczne cechy, bez notatki i zdjęcia.
+    val frazaWyceny = if (nazwa.isBlank()) "" else listOf(nazwa, material, wymiary)
+        .map { it.trim() }.filter { it.isNotBlank() }.joinToString(" ")
+    val kluczZapytaniaWyceny = "$nazwa\n$material\n$wymiary\n$kategoria"
+    val wycenaAktualna = pamiecWyceny.pasujeDoZapytania(kluczZapytaniaWyceny)
+    val moznaBadacCeny = warsztatGotowy && frazaWyceny.isNotBlank() && naZbadajCeneRynkowa != null &&
+        !agentPracuje && !badanieCenyWToku && !tworzenieSzkicuWToku
 
-    LaunchedEffect(sugerowanaCenaRynkowa, sugerowanaCenaAllegro, minCenaRynkowa, maxCenaRynkowa, wycenaZmierzona, badanieCenyWToku) {
-        if (!wycenaZmierzona || badanieCenyWToku) {
+    LaunchedEffect(sugerowanaCenaRynkowa, sugerowanaCenaAllegro, minCenaRynkowa, maxCenaRynkowa, wycenaZmierzona, badanieCenyWToku, wycenaAktualna) {
+        if (!wycenaZmierzona || badanieCenyWToku || !wycenaAktualna) {
             sugerowanaRynkowaStr = ""
             sugerowanaAllegroStr = ""
             zakresCenStr = ""
             return@LaunchedEffect
         }
-        if (sugerowanaCenaRynkowa != null && sugerowanaCenaRynkowa > 0) {
+        if (sugerowanaCenaRynkowa != null && sugerowanaCenaRynkowa.isFinite() && sugerowanaCenaRynkowa > 0) {
             sugerowanaRynkowaStr = "%.2f".format(java.util.Locale.US, sugerowanaCenaRynkowa)
         }
-        if (sugerowanaCenaAllegro != null && sugerowanaCenaAllegro > 0) {
+        if (sugerowanaCenaAllegro != null && sugerowanaCenaAllegro.isFinite() && sugerowanaCenaAllegro > 0) {
             sugerowanaAllegroStr = "%.2f".format(java.util.Locale.US, sugerowanaCenaAllegro)
         }
-        if (minCenaRynkowa != null && maxCenaRynkowa != null && minCenaRynkowa > 0) {
+        if (minCenaRynkowa != null && maxCenaRynkowa != null && minCenaRynkowa.isFinite() && maxCenaRynkowa.isFinite() && minCenaRynkowa > 0) {
             zakresCenStr = "%.0f - %.0f zł".format(java.util.Locale.US, minCenaRynkowa, maxCenaRynkowa)
         }
     }
@@ -824,14 +841,17 @@ fun EkranKreatora(
                     }
                 },
                 postep = postepPracy, bladOperacji = bladPracy,
-                naZbadajCeny = naZbadajCeneRynkowa?.let { zbadaj -> {
-                    zapytanieProstejWyceny = "$nazwa\n$kategoria"
-                    zbadaj(nazwa.ifBlank { notatka }, kategoria) { _, _, _, _ -> }
+                naZbadajCeny = naZbadajCeneRynkowa?.takeIf { moznaBadacCeny }?.let { zbadaj -> {
+                    zapytanieWyceny = kluczZapytaniaWyceny
+                    zbadaj(frazaWyceny, kategoria) { _, _, _, _ -> }
                 } },
                 badanieCen = badanieCenyWToku,
-                sugestiaCeny = sugerowanaCenaRynkowa.takeIf { zapytanieProstejWyceny == "$nazwa\n$kategoria" },
-                wycenaZmierzona = wycenaZmierzona, ostrzezenieWyceny = ostrzezenieWyceny,
-                bladWyceny = bladWyceny.takeIf { zapytanieProstejWyceny == "$nazwa\n$kategoria" },
+                sugestiaCeny = sugerowanaCenaRynkowa.takeIf { wycenaAktualna },
+                wycenaZmierzona = wycenaZmierzona && wycenaAktualna,
+                ostrzezenieWyceny = ostrzezenieWyceny.takeIf { wycenaAktualna },
+                sprawdzonoWyceny = sprawdzonoWyceny.takeIf { wycenaAktualna }.orEmpty(),
+                ofertyRynkowe = ofertyRynkowe.takeIf { wycenaAktualna }.orEmpty(),
+                bladWyceny = bladWyceny.takeIf { wycenaAktualna },
                 tworzenieSzkicu = tworzenieSzkicuWToku, komunikatAllegro = komunikatAllegro,
                 maZdjecieNaSerwerze = p.obrazy.isNotEmpty(),
                 wyszukiwanieKategorii = wyszukiwanieKategorii, naSzukajKategorii = naSzukajKategorii,
@@ -955,20 +975,20 @@ fun EkranKreatora(
                 ) {
                     Button(
                         onClick = {
-                            val frazaDoSzukania = nazwa.ifBlank { notatka.take(50).ifBlank { "rękodzieło artystyczne" } }
-                            naZbadajCeneRynkowa?.invoke(frazaDoSzukania, kategoria) { _, _, _, _ -> }
+                            if (moznaBadacCeny) {
+                                zapytanieWyceny = kluczZapytaniaWyceny
+                                naZbadajCeneRynkowa?.invoke(frazaWyceny, kategoria) { _, _, _, _ -> }
+                            }
                         },
-                        enabled = !badanieCenyWToku && (nazwa.isNotBlank() || notatka.isNotBlank() || lokalneZdjecie != null),
+                        enabled = moznaBadacCeny,
                         modifier = Modifier.weight(1f)
                     ) {
                         if (badanieCenyWToku) {
                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                             Spacer(Modifier.width(6.dp))
-                            Text("Badam rynek...", style = MaterialTheme.typography.labelSmall)
+                            Text("Sprawdzam ceny w internecie...", style = MaterialTheme.typography.labelSmall)
                         } else {
-                            // Nazwa mowi, co naprawde sie dzieje: OLX i Erli nigdy nie
-                        // byly odpytywane, a obiecywala je etykieta przycisku.
-                        Text("🔍 Sprawdź ceny na Allegro", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                            Text("Sprawdź ceny w internecie", style = MaterialTheme.typography.labelSmall)
                         }
                     }
 
@@ -984,45 +1004,33 @@ fun EkranKreatora(
                 }
 
                 // Wyniki badania cen rynkowych
-                if (!bladWyceny.isNullOrBlank()) Text(bladWyceny, color = MaterialTheme.colorScheme.error)
-                Text("Badanie nie zmienia wpisanej ceny. Bez potwierdzonych ofert wpisz cenę ręcznie.", style = MaterialTheme.typography.bodySmall)
-                if (wycenaZmierzona && !badanieCenyWToku && sugerowanaCenaRynkowa != null && sugerowanaCenaRynkowa.isFinite() && sugerowanaCenaRynkowa > 0) {
+                if (wycenaAktualna && !bladWyceny.isNullOrBlank()) Text(bladWyceny, color = MaterialTheme.colorScheme.error)
+                Text("Wyszukiwanie wysyła nazwę, kategorię, materiał i wymiary jako tekst. Wpisuj tu wyłącznie publiczne cechy. Zdjęcie i notatka nie są wysyłane. Badanie nie zmienia wpisanej ceny.", style = MaterialTheme.typography.bodySmall)
+                if (!warsztatGotowy || frazaWyceny.isBlank()) Text("Wpisz nazwę wyrobu i poczekaj na gotowość warsztatu.", style = MaterialTheme.typography.bodySmall)
+                if (wycenaAktualna && !badanieCenyWToku) ZrodlaWyceny(ofertyRynkowe, sprawdzonoWyceny, ostrzezenieWyceny)
+                if (wycenaAktualna && wycenaZmierzona && !badanieCenyWToku && sugerowanaCenaRynkowa != null && sugerowanaCenaRynkowa.isFinite() && sugerowanaCenaRynkowa > 0) {
                     Card(
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
                         Column(Modifier.padding(10.dp)) {
                             Text(
-                                if (wycenaZmierzona) "📊 Ceny zmierzone na Allegro:"
-                                else "⚠️ SZACUNEK — to nie są ceny z rynku:",
+                                "Ceny ofertowe w internecie",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                                color = if (wycenaZmierzona) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.error
+                                color = MaterialTheme.colorScheme.primary
                             )
-                            // Szacunek potrafi rozminac sie z rynkiem trzykrotnie,
-                            // a wyglada na ekranie tak samo jak zmierzona cena.
-                            // Powod podajemy wprost, zeby dalo sie zdecydowac,
-                            // czy sprawdzic cene recznie.
-                            if (!wycenaZmierzona && !ostrzezenieWyceny.isNullOrBlank()) {
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    ostrzezenieWyceny,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
                             Spacer(Modifier.height(4.dp))
                             val sRyn = "%.2f".format(java.util.Locale.US, sugerowanaCenaRynkowa)
                             val sAll = sugerowanaCenaAllegro?.takeIf { it.isFinite() && it > 0 }?.let { "%.2f".format(java.util.Locale.US, it) }.orEmpty()
                             Text(
-                                (if (wycenaZmierzona) "• Mediana ofert: " else "• Szacowana cena: ") +
+                                "• Propozycja ceny: " +
                                         "$sRyn zł" +
                                         (if (zakresCenStr.isNotBlank()) " (zakres: $zakresCenStr)" else ""),
                                 style = MaterialTheme.typography.bodySmall
                             )
-                            Text(
-                                "• Propozycja na Allegro z buforem (nie potwierdza wysokości prowizji): $sAll zł",
+                            if (sAll.isNotBlank()) Text(
+                                "• Propozycja ceny na Allegro: $sAll zł. Opłaty sprawdź dla wybranej kategorii.",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
                             )
@@ -1674,9 +1682,10 @@ fun EkranKreatora(
                     enabled = cena.isNotBlank(),
                     modifier = Modifier.padding(top = 8.dp)
                 ) {
-                    Text("+12% prowizji")
+                    Text("Dodaj 12% do ceny")
                 }
             }
+            Text("To opcjonalny narzut, nie stawka prowizji. Opłaty Allegro zależą od kategorii; sprawdź je przed wystawieniem.", style = MaterialTheme.typography.bodySmall)
 
             PoleZPodpowiedzia(
                 allegroId,

@@ -254,6 +254,9 @@ data class OfertaCenowa(
     val portal: String = "",
     val cena: Double = 0.0,
     val tytul: String = "",
+    val url: String = "",
+    val fragment: String = "",
+    val waluta: String = "",
 )
 
 @Serializable
@@ -266,24 +269,34 @@ data class OdpowiedzWyceny(
     @SerialName("min_cena") val minCena: Double = 0.0,
     @SerialName("max_cena") val maxCena: Double = 0.0,
     @SerialName("liczba_ofert") val liczbaOfert: Int = 0,
-    /**
-     * SkÄ…d wziÄ™Ĺ‚a siÄ™ kwota. To NIE jest pole informacyjne â€” na tej liczbie
-     * ustawia siÄ™ cenÄ™ wyrobu, wiÄ™c ekran musi odrĂłĹĽniÄ‡ zmierzony rynek od
-     * zgadywania.
-     *
-     * â€žallegro-api" / â€žallegro-listing" â€” mediana z ĹĽywych ofert Allegro.
-     * â€žestymacja" â€” tabela pracowni, gdy Allegro nie oddaĹ‚o listingu.
-     */
+    /** Internet: tavily-chatgpt. Starsze allegro-api/allegro-listing pozostają obsługiwane. */
     val zrodlo: String = "",
-    /** WypeĹ‚nione wyĹ‚Ä…cznie przy â€žestymacja" â€” treĹ›Ä‡ do pokazania wprost. */
+    /** Ostrzeżenie pokazujemy także przy poprawnej rekomendacji. */
     val ostrzezenie: String? = null,
     val znalezione: List<OfertaCenowa> = emptyList(),
     val blad: String? = null,
+    val sprawdzono: String = "",
 ) {
-    /** Czy kwota pochodzi z realnych ofert, a nie z tabeli awaryjnej. */
+    /** Zgodność dowodów; porównywalność wyrobów ocenia serwer i użytkownik. */
     val zmierzoneNaRynku: Boolean
-        get() = ok && zrodlo in setOf("allegro-api", "allegro-listing") &&
-            liczbaOfert > 0 && sugerowanaCena.isFinite() && sugerowanaCena > 0
+        get() {
+            if (!ok || !sugerowanaCena.isFinite() || sugerowanaCena <= 0) return false
+            return when (zrodlo) {
+                "allegro-api", "allegro-listing" -> liczbaOfert > 0
+                "tavily-chatgpt" -> {
+                    if (znalezione.size < 3 || liczbaOfert != znalezione.size) return false
+                    if (ostrzezenie.isNullOrBlank() || runCatching { java.time.OffsetDateTime.parse(sprawdzono) }.isFailure) return false
+                    val adresy = znalezione.map { oferta ->
+                        if (!oferta.cena.isFinite() || oferta.cena <= 0 || oferta.waluta != "PLN" ||
+                            oferta.portal.isBlank() || oferta.tytul.isBlank() ||
+                            !pl.fwdrucik.sklep.narzedzia.fragmentPotwierdzaCenePln(oferta.fragment, oferta.cena)) return false
+                        pl.fwdrucik.sklep.narzedzia.bezpiecznyUrlZrodla(oferta.url)?.substringBefore('#') ?: return false
+                    }
+                    adresy.distinct().size == znalezione.size
+                }
+                else -> false
+            }
+        }
 }
 
 @Serializable

@@ -26,6 +26,16 @@ fun klientWarsztatu(): OkHttpClient = OkHttpClient.Builder()
             }
             request.newBuilder().method(request.method, raz).build()
         } else request
-        chain.proceed(pojedynczy)
+        // Wycena: do 15 s kontroli limitu + 15 s wyszukiwania + 90 s CLI, z zapasem.
+        val oczekiwanie = if (request.url.encodedPath == "/wycena") chain.withReadTimeout(150, TimeUnit.SECONDS) else chain
+        oczekiwanie.proceed(pojedynczy)
+    }
+    .addNetworkInterceptor { chain ->
+        val response = chain.proceed(chain.request())
+        // OkHttp ponawia 503 Retry-After: 0 także przy retryOnConnectionFailure(false).
+        // Tylko dla wyceny usuwamy wskazówkę ponowienia; kod i treść błędu zostają.
+        if (chain.request().url.encodedPath == "/wycena" && response.code == 503) {
+            response.newBuilder().removeHeader("Retry-After").build()
+        } else response
     }
     .build()

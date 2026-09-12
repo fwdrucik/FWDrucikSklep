@@ -25,6 +25,7 @@ import pl.fwdrucik.sklep.dane.Produkt
 import pl.fwdrucik.sklep.dane.SzkicProduktu
 import pl.fwdrucik.sklep.siec.StanSerwera
 import pl.fwdrucik.sklep.siec.PozycjaKolejki
+import pl.fwdrucik.sklep.siec.OdpowiedzWyceny
 import pl.fwdrucik.sklep.dane.Wynik
 import pl.fwdrucik.sklep.dane.TrojkaFirebase
 import pl.fwdrucik.sklep.dane.KopiaRobocza
@@ -106,18 +107,45 @@ data class StanEkranu(
     val badanieCenyWToku: Boolean = false,
     val bladWyceny: String? = null,
     val wyszukiwanieKategorii: StanWyszukiwaniaKategorii = StanWyszukiwaniaKategorii(),
-    /**
-     * Czy ostatnia wycena to zmierzony rynek, czy tabela awaryjna.
-     *
-     * PO CO OSOBNE POLE: do etapu 105 ekran pokazywal samÄ… kwotÄ™, a serwer
-     * po cichu podstawial oszacowanie, gdy Allegro nie oddalo listingu.
-     * Kwota wygladala tak samo w obu przypadkach, a roznila sie nawet
-     * trzykrotnie â€” i to na niej ustawia sie cene wyrobu.
-     */
+    /** Wynik przeszedł walidację dowodów; użycie ceny nadal wymaga dotknięcia. */
     val wycenaZmierzona: Boolean = false,
-    /** TreĹ›Ä‡ ostrzeĹĽenia z serwera; null, gdy kwota jest z realnych ofert. */
+    /** Ostrzeżenie z serwera, także dla poprawnej rekomendacji. */
     val ostrzezenieWyceny: String? = null,
+    val sprawdzonoWyceny: String = "",
 ) {
+    internal fun rozpocznijBadanieCeny(): StanEkranu = copy(
+        badanieCenyWToku = true, komunikat = "Sprawdzam ceny w internecie...",
+        bladWyceny = null, sugerowanaCenaRynkowa = null, sugerowanaCenaAllegro = null,
+        minCenaRynkowa = null, maxCenaRynkowa = null, ofertyRynkowe = emptyList(),
+        wycenaZmierzona = false, ostrzezenieWyceny = null, sprawdzonoWyceny = "",
+    )
+
+    internal fun zWynikiemWyceny(odp: OdpowiedzWyceny): StanEkranu {
+        val baza = rozpocznijBadanieCeny().copy(
+            badanieCenyWToku = false, komunikat = null,
+            ofertyRynkowe = odp.znalezione, sprawdzonoWyceny = odp.sprawdzono,
+            ostrzezenieWyceny = odp.ostrzezenie?.takeIf { it.isNotBlank() }
+                ?: if (odp.zrodlo == "tavily-chatgpt")
+                    "Wyniki wyszukiwania to ceny ofertowe, nie ceny sprzedaży. Sprawdź porównywalność wyrobów."
+                else null,
+        )
+        if (!odp.zmierzoneNaRynku) {
+            val powod = odp.blad?.takeIf { it.isNotBlank() }
+                .orEmpty().ifBlank { "Brak wystarczających, poprawnych źródeł do rekomendacji ceny." } +
+                " Wpisz cenę ręcznie. Twoja dotychczasowa cena nie została zmieniona."
+            return baza.copy(bladWyceny = powod, blad = powod)
+        }
+        return baza.copy(
+            sugerowanaCenaRynkowa = odp.sugerowanaCena,
+            sugerowanaCenaAllegro = odp.sugerowanaAllegro.takeIf { it.isFinite() && it > 0 },
+            minCenaRynkowa = odp.minCena.takeIf { it.isFinite() && it > 0 },
+            maxCenaRynkowa = odp.maxCena.takeIf { it.isFinite() && it > 0 },
+            wycenaZmierzona = true,
+            komunikat = "Propozycja z ${odp.liczbaOfert} ofert w internecie: ${odp.sugerowanaCena} zł " +
+                "— sprawdź porównywalność wyrobów przed zastosowaniem ceny.",
+        )
+    }
+
     /** Czyścimy sesję i jej zawartość; adres komputera jest zwykłą konfiguracją. */
     internal fun poWylogowaniu(): StanEkranu = StanEkranu(
         zalogowany = false,
@@ -418,39 +446,15 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
     ) {
         if (fraza.isBlank() || _stan.value.badanieCenyWToku) return
         viewModelScope.launch {
-            _stan.update { it.copy(badanieCenyWToku = true, komunikat = "Sprawdzam ceny na Allegro...",
-                bladWyceny = null, sugerowanaCenaRynkowa = null, sugerowanaCenaAllegro = null,
-                minCenaRynkowa = null, maxCenaRynkowa = null, ofertyRynkowe = emptyList(),
-                wycenaZmierzona = false, ostrzezenieWyceny = null) }
+            _stan.update { it.rozpocznijBadanieCeny() }
             try {
                 val adres = adresRoboczy()
                 val wynik = repozytorium.zbadajCeneRynkowa(adres, fraza, kategoria)
                 when (wynik) {
                     is Wynik.Jest -> {
                         val odp = wynik.dane
-                        if (!odp.zmierzoneNaRynku) {
-                            val powod = listOfNotNull(odp.blad?.takeIf { it.isNotBlank() }, odp.ostrzezenie?.takeIf { it.isNotBlank() })
-                                .distinct().joinToString(" ").ifBlank { "Nie potwierdzono cen rzeczywistych ofert. Nie stosujemy szacunku." } +
-                                " Wpisz cenę ręcznie. Twoja dotychczasowa cena nie została zmieniona."
-                            _stan.update { it.copy(badanieCenyWToku = false, bladWyceny = powod, blad = powod) }
-                            return@launch
-                        }
-                        _stan.update {
-                            it.copy(
-                                badanieCenyWToku = false,
-                                sugerowanaCenaRynkowa = odp.sugerowanaCena,
-                                sugerowanaCenaAllegro = odp.sugerowanaAllegro,
-                                minCenaRynkowa = odp.minCena,
-                                maxCenaRynkowa = odp.maxCena,
-                                ofertyRynkowe = odp.znalezione,
-                                wycenaZmierzona = odp.zmierzoneNaRynku,
-                                ostrzezenieWyceny = odp.ostrzezenie.takeIf { _ -> !odp.zmierzoneNaRynku },
-                                komunikat =
-                                    "Mediana z ${odp.liczbaOfert} ofert Allegro: " +
-                                        "${odp.sugerowanaCena.toInt()} zł " +
-                                        "— sprawdź porównywalność wyrobów przed zastosowaniem ceny."
-                            )
-                        }
+                        _stan.update { it.zWynikiemWyceny(odp) }
+                        if (!odp.zmierzoneNaRynku) return@launch
                         naWynik(odp.sugerowanaCena, odp.sugerowanaAllegro, odp.minCena, odp.maxCena)
                     }
                     is Wynik.Blad -> {

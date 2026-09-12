@@ -53,6 +53,8 @@ fun AsystentSklepu(
     sugestiaCeny: Double?,
     wycenaZmierzona: Boolean,
     ostrzezenieWyceny: String?,
+    sprawdzonoWyceny: String,
+    ofertyRynkowe: List<pl.fwdrucik.sklep.siec.OfertaCenowa>,
     bladWyceny: String?,
     naSzkicAllegro: (() -> Unit)?,
     tworzenieSzkicu: Boolean,
@@ -194,16 +196,17 @@ fun AsystentSklepu(
                 Text("4. Wpisz cenę i sprawdź całość", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(dane.cena, { naZmien(dane.copy(cena = it)) }, label = { Text("Cena w złotych") }, placeholder = { Text("np. 49,90") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), enabled = !zajety, modifier = Modifier.fillMaxWidth())
-                OutlinedButton(onClick = { naZbadajCeny?.invoke() }, enabled = !zajety && naZbadajCeny != null && dane.nazwa.isNotBlank(),
+                OutlinedButton(onClick = { naZbadajCeny?.invoke() }, enabled = !zajety && !badanieCen && naZbadajCeny != null && dane.nazwa.isNotBlank(),
                     modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-                    Text(if (badanieCen) "Sprawdzam ceny…" else "Sprawdź ceny podobnych wyrobów")
+                    Text(if (badanieCen) "Sprawdzam ceny w internecie..." else "Sprawdź ceny podobnych wyrobów")
                 }
-                Text("Opcjonalnie. Porównanie nie zmienia Twojej ceny.", style = MaterialTheme.typography.bodySmall)
+                Text("Opcjonalnie. Wyszukiwanie wysyła nazwę, kategorię, materiał i wymiary wyrobu jako tekst. Wpisuj tu wyłącznie publiczne cechy. Zdjęcie i notatka nie są wysyłane. Porównanie nie zmienia Twojej ceny.", style = MaterialTheme.typography.bodySmall)
+                if (naZbadajCeny == null && !badanieCen) Text("Wpisz nazwę wyrobu i poczekaj na gotowość warsztatu.", style = MaterialTheme.typography.bodySmall)
                 if (!bladWyceny.isNullOrBlank()) Text(bladWyceny, color = MaterialTheme.colorScheme.error)
+                if (!badanieCen) ZrodlaWyceny(ofertyRynkowe, sprawdzonoWyceny, ostrzezenieWyceny)
                 if (!badanieCen && wycenaZmierzona && sugestiaCeny != null && sugestiaCeny.isFinite() && sugestiaCeny > 0) {
                     val kwota = "%.2f".format(java.util.Locale.US, sugestiaCeny)
-                    Text("Propozycja na podstawie ofert: ${kwota.replace('.', ',')} zł. To ceny ofert, nie potwierdzonych sprzedaży.")
-                    if (!ostrzezenieWyceny.isNullOrBlank()) Text(ostrzezenieWyceny, color = MaterialTheme.colorScheme.error)
+                    Text("Propozycja na podstawie ofert w internecie: ${kwota.replace('.', ',')} zł. To ceny ofert, nie potwierdzonych sprzedaży.")
                     OutlinedButton(onClick = { naZmien(dane.copy(cena = kwota)) }, enabled = !zajety) { Text("Użyj tej ceny w sklepie") }
                 }
                 Text("Zdjęcie, opis i cena muszą zgadzać się z tym, co sprzedajesz.")

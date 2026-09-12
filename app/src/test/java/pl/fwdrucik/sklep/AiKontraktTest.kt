@@ -85,6 +85,21 @@ class AiKontraktTest {
         assertFalse(katalog.moznaWybrac("mcp:assistant", "tekst"))
     }
 
+    @Test fun wycenaWysylaTylkoJawnaFrazeIKategorieBezZdjecia() = runBlocking {
+        odpowiedz("""{"ok":false,"zrodlo":"tavily-chatgpt","kod":"configuration","blad":"Brak klucza Tavily. Wpisz cenę ręcznie.","znalezione":[],"liczba_ofert":0}""")
+        val wynik = api.wycena("$base/wycena", "Miska żywiczna 20 cm", "zywica")
+        val request = serwer.takeRequest(2, TimeUnit.SECONDS)!!
+        assertEquals("GET", request.method)
+        assertEquals("/wycena", request.requestUrl!!.encodedPath)
+        assertEquals(setOf("fraza", "kategoria"), request.requestUrl!!.queryParameterNames)
+        assertEquals("Miska żywiczna 20 cm", request.requestUrl!!.queryParameter("fraza"))
+        assertEquals("zywica", request.requestUrl!!.queryParameter("kategoria"))
+        assertEquals(0L, request.bodySize)
+        assertFalse(wynik.zmierzoneNaRynku)
+        assertEquals("Brak klucza Tavily. Wpisz cenę ręcznie.", wynik.blad)
+        assertEquals(1, serwer.requestCount)
+    }
+
     @Test fun wyborFiltrujeRodzajIDostepnoscNieWymyslaModeli() {
         val katalog = KatalogAi(ok = true, modele = listOf(
             ModelAi(id = "obraz", rodzaje = listOf("obraz"), dostepny = true),

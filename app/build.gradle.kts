@@ -11,15 +11,15 @@ plugins {
 val localProps = Properties()
 rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { localProps.load(it) }
 
-// Numer wersji: jawny releaseVersionCode ma pierwszeństwo; domyślnie historia Git i minimum 34.
+// Numer wersji: jawny releaseVersionCode ma pierwszeństwo; domyślnie historia Git i minimum 35.
 // Aktualizacja wymaga większego VC niż poprzednio wydany oraz tego samego podpisu/applicationId.
 // Liczba commitów nie gwarantuje wzrostu na innej gałęzi ani przy kolejnym buildzie bez commita.
-// Kolejne wydanie: -PreleaseVersionCode=N, gdzie N > ostatnio wydany numer (obecnie 34).
+// Kolejne wydanie: -PreleaseVersionCode=N, gdzie N > ostatnio wydany numer (obecnie 35).
 //
 // PO CO: recznie wpisywany numer rozjezdza sie z nazwami paczek w archiwum - po miesiacu
-// nie da sie powiedziec, ktora paczka na telefonie odpowiada ktoremu stanowi kodu. Liczba
-// commitow rosnie zawsze i nigdy nie maleje, czyli spelnia to, czego Android wymaga
-// od versionCode. Panel warsztatowy liczy to tak samo.
+// nie da sie powiedziec, ktora paczka na telefonie odpowiada ktoremu stanowi kodu.
+// Skrot commita w versionName identyfikuje zrodla, a jawny releaseVersionCode
+// zapewnia wzrost numeru aktualizacji niezaleznie od historii galezi.
 //
 // PO CO BAZA 10: wszystkie wczesniejsze paczki sklepu mialy versionCode 1. Baza odsuwa
 // nowa numeracje od tamtych, zeby dwie rozne paczki nie chodzily pod tym samym numerem.
@@ -39,8 +39,8 @@ fun zGita(vararg argumenty: String, gdyBrak: String): String = try {
 val liczbaCommitow = zGita("rev-list", "--count", "HEAD", gdyBrak = "0").toInt()
 val skrotCommita = zGita("rev-parse", "--short", "HEAD", gdyBrak = "bezgita")
 val kodWydania = providers.gradleProperty("releaseVersionCode").orNull?.let {
-    requireNotNull(it.toIntOrNull()?.takeIf { numer -> numer >= 34 }) { "releaseVersionCode musi być liczbą całkowitą >= 34." }
-} ?: maxOf(34, 10 + liczbaCommitow)
+    requireNotNull(it.toIntOrNull()?.takeIf { numer -> numer >= 35 }) { "releaseVersionCode musi być liczbą całkowitą >= 35." }
+} ?: maxOf(35, 10 + liczbaCommitow)
 
 android {
     namespace = "pl.fwdrucik.sklep"
