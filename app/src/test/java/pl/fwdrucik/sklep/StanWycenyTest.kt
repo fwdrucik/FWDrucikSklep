@@ -9,6 +9,20 @@ import pl.fwdrucik.sklep.siec.OfertaCenowa
 import pl.fwdrucik.sklep.ui.StanEkranu
 
 class StanWycenyTest {
+    @Test fun odmowaZGotowaInstrukcjaNiePowielaTekstuAniBaneraBledu() {
+        val komunikat = "Wyszukiwanie zatrzymano. Wpisz cenę ręcznie; dotychczasowej ceny nie zmieniono."
+        val po = StanEkranu().zWynikiemWyceny(OdpowiedzWyceny(ok = false, blad = komunikat))
+        assertEquals(komunikat, po.bladWyceny)
+        assertNull(po.blad)
+    }
+
+    @Test fun bladWycenyNieNadpisujeNiezaleznegoBleduZapisuProduktu() {
+        val po = StanEkranu(blad = "Nie zapisano produktu").zWynikiemWyceny(
+            OdpowiedzWyceny(ok = false, blad = "Limit wyszukiwania"))
+        assertEquals("Nie zapisano produktu", po.blad)
+        assertTrue(po.bladWyceny!!.contains("Wpisz cenę ręcznie"))
+    }
+
     private fun odpowiedz() = OdpowiedzWyceny(ok = true, zrodlo = "tavily-chatgpt", liczbaOfert = 3,
         sugerowanaCena = 50.0, sugerowanaAllegro = 50.0, minCena = 40.0, maxCena = 60.0,
         sprawdzono = "2026-09-12T10:15:30Z", ostrzezenie = "Wyniki wyszukiwania: ceny ofertowe, nie ceny sprzedaży. Sprawdź porównywalność.",

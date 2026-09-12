@@ -130,10 +130,13 @@ data class StanEkranu(
                 else null,
         )
         if (!odp.zmierzoneNaRynku) {
-            val powod = odp.blad?.takeIf { it.isNotBlank() }
-                .orEmpty().ifBlank { "Brak wystarczających, poprawnych źródeł do rekomendacji ceny." } +
-                " Wpisz cenę ręcznie. Twoja dotychczasowa cena nie została zmieniona."
-            return baza.copy(bladWyceny = powod, blad = powod)
+            val opis = odp.blad?.takeIf { it.isNotBlank() }
+                .orEmpty().ifBlank { "Brak wystarczających, poprawnych źródeł do rekomendacji ceny." }
+            val powod = if (opis.contains("Wpisz cenę ręcznie", ignoreCase = true)) opis else
+                opis + " Wpisz cenę ręcznie. Twoja dotychczasowa cena nie została zmieniona."
+            // The price section owns this error. Do not duplicate it in the global
+            // banner or overwrite an independent product-save failure.
+            return baza.copy(bladWyceny = powod)
         }
         return baza.copy(
             sugerowanaCenaRynkowa = odp.sugerowanaCena,
