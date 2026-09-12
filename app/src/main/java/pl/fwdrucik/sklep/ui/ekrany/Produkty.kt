@@ -2,6 +2,8 @@ package pl.fwdrucik.sklep.ui.ekrany
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -64,13 +66,11 @@ fun EkranProduktow(
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(
+        Column(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(
-                modifier = Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 listOf("wszystkie" to "Wszystkie").plus(
@@ -84,10 +84,10 @@ fun EkranProduktow(
                 }
             }
             if (naImportujAllegro != null) {
-                Spacer(Modifier.size(8.dp))
                 AssistChip(
                     onClick = { pokazImportAllegro = true },
                     label = { Text("⚡ Import Allegro", style = MaterialTheme.typography.labelSmall) },
+                    modifier = Modifier.align(Alignment.End),
                 )
             }
         }
@@ -194,6 +194,7 @@ fun EkranProduktow(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun KartaProduktu(
     produkt: Produkt,
@@ -202,82 +203,80 @@ private fun KartaProduktu(
     naUsun: () -> Unit,
 ) {
     Card(onClick = naEdycje, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (produkt.obrazy.isNotEmpty()) {
-                AsyncImage(
-                    model = BuildConfig.ADRES_API + produkt.obrazy.first().src,
-                    contentDescription = produkt.obrazy.first().alt.ifBlank { produkt.nazwa },
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(64.dp),
-                )
-            } else {
-                Column(
-                    Modifier.size(64.dp),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
+        Column(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                produkt.nazwa,
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (produkt.obrazy.isNotEmpty()) {
+                    AsyncImage(
+                        model = BuildConfig.ADRES_API + produkt.obrazy.first().src,
+                        contentDescription = produkt.obrazy.first().alt.ifBlank { produkt.nazwa },
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(48.dp),
+                    )
+                } else {
                     Text("bez\nzdjęcia", style = MaterialTheme.typography.labelSmall)
                 }
-            }
-
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(
-                    produkt.nazwa,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    groszeNaZlote(produkt.cenaObowiazujaca) + " / " + produkt.jednostka,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    opisStanu(produkt),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (produkt.brakNaStanie || produkt.malyStan) {
-                        MaterialTheme.colorScheme.secondary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-                Row(
-                    Modifier.padding(top = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    // Trzy stany w kolku zamiast przelacznika na dwa.
-                    // Poprzednio z „ukryty" wracalo sie tylko do publikacji —
-                    // nie bylo jak powiedziec „wracam do roboty nad tym".
-                    val nastepny = Statusy.nastepnyProduktu(produkt.status)
-                    AssistChip(
-                        onClick = { naStatus(nastepny) },
-                        label = {
-                            Text(
-                                "${Statusy.nazwaProduktu(produkt.status)} → ${Statusy.nazwaProduktu(nastepny)}",
-                                maxLines = 1,
-                            )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        groszeNaZlote(produkt.cenaObowiazujaca) + " / " + produkt.jednostka,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        opisStanu(produkt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (produkt.brakNaStanie || produkt.malyStan) {
+                            MaterialTheme.colorScheme.secondary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
                         },
                     )
-                    if (!produkt.allegroUrl.isNullOrBlank()) {
-                        AssistChip(
-                            onClick = {},
-                            label = { Text("🟠 Allegro", maxLines = 1) },
-                        )
-                    } else {
-                        AssistChip(
-                            onClick = {},
-                            enabled = false,
-                            label = { Text(Statusy.opisProduktu(produkt.status), maxLines = 1) },
-                        )
-                    }
                 }
             }
-
-            IconButton(onClick = naEdycje) {
-                Icon(Icons.Filled.Edit, contentDescription = "Edytuj ${produkt.nazwa}")
+            FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                // Trzy stany w kolku zamiast przelacznika na dwa.
+                // Poprzednio z „ukryty" wracalo sie tylko do publikacji —
+                // nie bylo jak powiedziec „wracam do roboty nad tym".
+                val nastepny = Statusy.nastepnyProduktu(produkt.status)
+                AssistChip(
+                    onClick = { naStatus(nastepny) },
+                    label = {
+                        Text("${Statusy.nazwaProduktu(produkt.status)} → ${Statusy.nazwaProduktu(nastepny)}")
+                    },
+                )
+                if (!produkt.allegroUrl.isNullOrBlank()) {
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("🟠 Allegro") },
+                    )
+                } else {
+                    AssistChip(
+                        onClick = {},
+                        enabled = false,
+                        label = { Text(Statusy.opisProduktu(produkt.status)) },
+                    )
+                }
             }
-            IconButton(onClick = naUsun) {
-                Icon(Icons.Filled.Delete, contentDescription = "Usuń ${produkt.nazwa}")
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                IconButton(onClick = naEdycje) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Edytuj ${produkt.nazwa}")
+                }
+                IconButton(onClick = naUsun) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Usuń ${produkt.nazwa}")
+                }
             }
         }
     }
@@ -322,37 +321,48 @@ private fun PustaLista(filtr: String) {
  * razem z reszta roboty. Serwer o nim nie wie i klient go nie zobaczy —
  * dlatego etykieta mowi wprost „prywatna".
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun KartaKopii(kopia: KopiaRobocza, naOtworz: () -> Unit, naUsun: () -> Unit) {
     Card(onClick = naOtworz, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (kopia.zdjecie.isNotBlank()) {
-                AsyncImage(
-                    model = java.io.File(kopia.zdjecie),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(56.dp),
-                )
+        Column(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                kopia.nazwa.ifBlank { "Kopia robocza bez nazwy" },
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                "Kopia robocza — prywatna, tylko na tym telefonie" +
+                    if (kopia.zapisano > 0) {
+                        " · " + java.text.SimpleDateFormat("HH:mm", java.util.Locale("pl"))
+                            .format(java.util.Date(kopia.zapisano))
+                    } else "",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (kopia.zdjecie.isNotBlank()) {
+                    AsyncImage(
+                        model = java.io.File(kopia.zdjecie),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(48.dp),
+                    )
+                }
+                FlowRow(
+                    Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                ) {
+                    TextButton(onClick = naOtworz) { Text("Dokończ") }
+                    TextButton(onClick = naUsun) { Text("Usuń") }
+                }
             }
-            Column(Modifier.weight(1f).padding(start = if (kopia.zdjecie.isBlank()) 0.dp else 10.dp)) {
-                Text(
-                    kopia.nazwa.ifBlank { "Kopia robocza bez nazwy" },
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    "Kopia robocza — prywatna, tylko na tym telefonie" +
-                        if (kopia.zapisano > 0) {
-                            " · " + java.text.SimpleDateFormat("HH:mm", java.util.Locale("pl"))
-                                .format(java.util.Date(kopia.zapisano))
-                        } else "",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            TextButton(onClick = naOtworz) { Text("Dokończ") }
-            TextButton(onClick = naUsun) { Text("Usuń") }
         }
     }
 }
