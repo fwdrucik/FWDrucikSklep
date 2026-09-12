@@ -14,7 +14,9 @@ fun klientWarsztatu(): OkHttpClient = OkHttpClient.Builder()
     .followRedirects(false)
     .followSslRedirects(false)
     .addInterceptor { chain ->
-        val request = chain.request()
+        // Serwer LAN zamyka bezczynne keep-alive. Zleceń nie wolno ponawiać,
+        // dlatego nie przenosimy połączenia HTTP/1.1 na następne zlecenie.
+        val request = chain.request().newBuilder().header("Connection", "close").build()
         val body = request.body
         val pojedynczy = if (request.method == "POST" && body != null) {
             // Także 503 Retry-After: 0 nie może zużyć limitu po raz drugi.

@@ -11,10 +11,10 @@ plugins {
 val localProps = Properties()
 rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { localProps.load(it) }
 
-// Numer wersji: jawny releaseVersionCode ma pierwszeństwo; domyślnie historia Git i minimum 39.
+// Numer wersji: jawny releaseVersionCode ma pierwszeństwo; domyślnie historia Git i minimum 40.
 // Aktualizacja wymaga większego VC niż poprzednio wydany oraz tego samego podpisu/applicationId.
 // Liczba commitów nie gwarantuje wzrostu na innej gałęzi ani przy kolejnym buildzie bez commita.
-// Kolejne wydanie: -PreleaseVersionCode=N, gdzie N > ostatnio wydany numer (obecnie 39).
+// Kolejne wydanie: -PreleaseVersionCode=N, gdzie N > ostatnio wydany numer (obecnie 40).
 //
 // PO CO: recznie wpisywany numer rozjezdza sie z nazwami paczek w archiwum - po miesiacu
 // nie da sie powiedziec, ktora paczka na telefonie odpowiada ktoremu stanowi kodu.
@@ -39,8 +39,8 @@ fun zGita(vararg argumenty: String, gdyBrak: String): String = try {
 val liczbaCommitow = zGita("rev-list", "--count", "HEAD", gdyBrak = "0").toInt()
 val skrotCommita = zGita("rev-parse", "--short", "HEAD", gdyBrak = "bezgita")
 val kodWydania = providers.gradleProperty("releaseVersionCode").orNull?.let {
-    requireNotNull(it.toIntOrNull()?.takeIf { numer -> numer >= 39 }) { "releaseVersionCode musi być liczbą całkowitą >= 39." }
-} ?: maxOf(39, 10 + liczbaCommitow)
+    requireNotNull(it.toIntOrNull()?.takeIf { numer -> numer >= 40 }) { "releaseVersionCode musi być liczbą całkowitą >= 40." }
+} ?: maxOf(40, 10 + liczbaCommitow)
 
 android {
     namespace = "pl.fwdrucik.sklep"

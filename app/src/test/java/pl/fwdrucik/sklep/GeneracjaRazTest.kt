@@ -11,6 +11,23 @@ import pl.fwdrucik.sklep.siec.klientWarsztatu
 import java.util.concurrent.TimeUnit
 
 class GeneracjaRazTest {
+    @Test fun kazdeZlecenieZaczynaSwiezePolaczenieBezPonowienia() {
+        MockWebServer().use { server ->
+            server.start()
+            repeat(2) { server.enqueue(MockResponse().setBody("ready")) }
+            val klient = klientWarsztatu()
+            repeat(2) {
+                klient.newCall(Request.Builder().url(server.url("/wycena"))
+                    .post("fixture".toRequestBody()).build()).execute().use { r ->
+                    assertEquals("ready", r.body!!.string())
+                }
+                val request = server.takeRequest(2, TimeUnit.SECONDS)!!
+                assertEquals("close", request.getHeader("Connection"))
+                assertEquals(0, request.sequenceNumber)
+            }
+            assertEquals(2, server.requestCount)
+        }
+    }
     @Test fun klientNiePonawiaPolaczeniaAniNiePrzekierowujeZdjecia() {
         val klient = klientWarsztatu()
         assertFalse(klient.retryOnConnectionFailure)

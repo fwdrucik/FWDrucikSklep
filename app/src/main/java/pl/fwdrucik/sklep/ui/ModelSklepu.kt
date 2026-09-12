@@ -463,16 +463,16 @@ class ModelSklepu(aplikacja: Application) : AndroidViewModel(aplikacja) {
                     }
                     is Wynik.Blad -> {
                         _stan.update {
-                            it.copy(
-                                badanieCenyWToku = false,
-                                bladWyceny = "Nie udało się sprawdzić cen: ${wynik.komunikat}. Spróbuj ponownie później.",
-                                blad = "Błąd badania cen: ${wynik.komunikat}"
-                            )
+                            it.zWynikiemWyceny(OdpowiedzWyceny(ok = false,
+                                blad = "Nie udało się sprawdzić cen. Spróbuj ponownie później."))
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _stan.update { it.copy(badanieCenyWToku = false, bladWyceny = "Nie udało się połączyć podczas sprawdzania cen. Spróbuj ponownie później.", blad = "Błąd połączenia: ${e.message}") }
+                _stan.update { it.zWynikiemWyceny(OdpowiedzWyceny(ok = false,
+                    blad = "Nie udało się sprawdzić cen. Spróbuj ponownie później.")) }
             }
         }
     }
